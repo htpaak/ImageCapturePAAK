@@ -214,20 +214,13 @@ class CaptureUI(QMainWindow):
     def capture_full_screen(self):
         """Perform full screen capture"""
         self.statusBar().showMessage('Capturing full screen...')
-        self.hide()  # Hide window during capture
         
-        # Apply slight delay (time for window to completely disappear)
-        QApplication.processEvents()
-        time.sleep(0.2)  # Short delay
-        
-        # Perform capture
-        self.last_capture_path = self.capture_module.capture_full_screen()
+        # 캡처 모듈에 현재 창 객체를 전달하여 캡처 중 숨김 처리
+        self.last_capture_path = self.capture_module.capture_full_screen(window_to_hide=self)
         
         # Update preview
         self.update_preview(self.last_capture_path)
         
-        # Restore UI
-        self.show()
         self.statusBar().showMessage('Full screen capture completed - Press Save button to save the image')
         self.save_btn.setEnabled(True)
 
@@ -239,9 +232,8 @@ class CaptureUI(QMainWindow):
         self.area_selector = AreaSelector(self)
         self.hide()  # Hide main window
         
-        # Apply slight delay (time for window to completely disappear)
+        # 더 길게 대기하지 않아도 됨 (캡처 모듈에서 대기 처리)
         QApplication.processEvents()
-        time.sleep(0.2)  # Short delay
         
         # Display area selector
         self.area_selector.show()
@@ -250,17 +242,24 @@ class CaptureUI(QMainWindow):
 
     def process_area_selection(self, rect):
         """Process area selection"""
-        if rect.width() > 0 and rect.height() > 0:
-            # Perform capture with selected area
-            self.last_capture_path = self.capture_module.capture_area(
-                rect.x(), rect.y(), rect.width(), rect.height())
+        # 유효하지 않은 선택 영역인 경우 처리
+        if rect.width() <= 5 or rect.height() <= 5:
+            self.statusBar().showMessage('Area selection too small or canceled.')
+            self.show()  # 메인 창 표시 확인
+            return
             
-            # Update preview
-            self.update_preview(self.last_capture_path)
-            self.statusBar().showMessage('Area capture completed - Press Save button to save the image')
-            self.save_btn.setEnabled(True)
-        else:
-            self.statusBar().showMessage('Area selection canceled.')
+        # 캡처 모듈에 현재 창 객체를 전달하여 캡처 중 숨김 처리
+        self.last_capture_path = self.capture_module.capture_area(
+            rect.x(), rect.y(), rect.width(), rect.height(), window_to_hide=self)
+        
+        # 창이 보이는지 확인
+        if not self.isVisible():
+            self.show()
+            
+        # Update preview
+        self.update_preview(self.last_capture_path)
+        self.statusBar().showMessage('Area capture completed - Press Save button to save the image')
+        self.save_btn.setEnabled(True)
 
     def update_preview(self, image_path):
         """Update captured image preview"""
@@ -455,10 +454,14 @@ class AreaSelector(QWidget):
             # Close window after selection is complete
             self.close()
             
-            # Pass selection information to parent
+            # Pass selection information to parent (창 표시는 캡처 모듈에서 처리됨)
             if self.parent:
-                self.parent.show()  # Show main window again
-                self.parent.process_area_selection(selection_rect)
+                # 선택 영역이 너무 작으면 메인 창을 직접 표시
+                if selection_rect.width() < 10 or selection_rect.height() < 10:
+                    self.parent.show()
+                    self.parent.statusBar().showMessage('Area selection too small - canceled.')
+                else:
+                    self.parent.process_area_selection(selection_rect)
 
     def keyPressEvent(self, event):
         """Key event handling"""
