@@ -350,19 +350,6 @@ class AreaSelector(QWidget):
         
         # Set cursor
         self.setCursor(Qt.CrossCursor)
-        
-        # Help label
-        self.help_label = QLabel("Drag to select rectangular area, ESC to cancel", self)
-        self.help_label.setStyleSheet("""
-            color: white; 
-            background-color: rgba(0, 0, 0, 180); 
-            padding: 12px; 
-            border-radius: 6px;
-            font-size: 16px;
-            font-weight: bold;
-        """)
-        self.help_label.move(20, 20)
-        self.help_label.adjustSize()
 
     def paintEvent(self, event):
         """Paint event for displaying selection area"""
@@ -372,7 +359,7 @@ class AreaSelector(QWidget):
         painter.fillRect(self.rect(), QColor(0, 0, 0, 50))
         
         # If area is being selected, make that area transparent
-        if self.is_selecting and not self.selection_start.isNull():
+        if self.is_selecting:  # 선택 시작점이 null인지 확인하지 않음
             selection_rect = QRect(self.selection_start, self.selection_end)
             selection_rect = selection_rect.normalized()
             
