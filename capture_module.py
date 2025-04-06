@@ -1,5 +1,6 @@
 import os
 import datetime
+import io
 from PIL import Image
 import mss
 import mss.tools
@@ -12,6 +13,7 @@ class ScreenCapture:
         :param save_dir: 캡처 이미지 저장 디렉토리 (기본값)
         """
         self.config_manager = config_manager
+        self.captured_image = None  # PIL Image 객체를 저장할 변수
         
         # 설정 관리자가 있으면 저장 디렉토리를 설정에서 가져옴
         if config_manager:
@@ -26,7 +28,7 @@ class ScreenCapture:
         """
         전체 화면 캡처
         :param window_to_hide: 캡처 중 숨길 윈도우 객체
-        :return: 저장된 파일 경로
+        :return: 임시 파일 경로 (미리보기용)
         """
         # 캡처 전에 윈도우가 보이지 않게 처리
         ui_was_visible = False
@@ -48,14 +50,19 @@ class ScreenCapture:
                 # 스크린샷 찍기
                 screenshot = sct.grab(monitor)
                 
-                # 파일명 생성 (현재 시간 기준)
-                filename = self._generate_filename()
-                filepath = os.path.join(self.save_dir, filename)
+                # PIL Image 객체로 변환
+                img = Image.frombytes("RGB", screenshot.size, screenshot.rgb)
+                self.captured_image = img  # 이미지 저장
                 
-                # 고화질로 저장 (PNG)
-                mss.tools.to_png(screenshot.rgb, screenshot.size, output=filepath)
+                # 임시 파일 생성 (미리보기용)
+                temp_dir = os.path.join(os.path.expanduser("~"), ".temp_snipix")
+                if not os.path.exists(temp_dir):
+                    os.makedirs(temp_dir)
                 
-                return filepath
+                temp_file = os.path.join(temp_dir, "temp_preview.png")
+                img.save(temp_file)
+                
+                return temp_file
         finally:
             # 캡처 후 윈도우 상태 복원 (예외 발생해도 실행)
             if window_to_hide and ui_was_visible:
@@ -69,7 +76,7 @@ class ScreenCapture:
         :param width: 너비
         :param height: 높이
         :param window_to_hide: 캡처 중 숨길 윈도우 객체
-        :return: 저장된 파일 경로
+        :return: 임시 파일 경로 (미리보기용)
         """
         # 캡처 전에 윈도우가 보이지 않게 처리
         ui_was_visible = False
@@ -89,18 +96,41 @@ class ScreenCapture:
                 # 스크린샷 찍기
                 screenshot = sct.grab(area)
                 
-                # 파일명 생성 (현재 시간 기준)
-                filename = self._generate_filename()
-                filepath = os.path.join(self.save_dir, filename)
+                # PIL Image 객체로 변환
+                img = Image.frombytes("RGB", screenshot.size, screenshot.rgb)
+                self.captured_image = img  # 이미지 저장
                 
-                # 고화질로 저장 (PNG)
-                mss.tools.to_png(screenshot.rgb, screenshot.size, output=filepath)
+                # 임시 파일 생성 (미리보기용)
+                temp_dir = os.path.join(os.path.expanduser("~"), ".temp_snipix")
+                if not os.path.exists(temp_dir):
+                    os.makedirs(temp_dir)
                 
-                return filepath
+                temp_file = os.path.join(temp_dir, "temp_preview.png")
+                img.save(temp_file)
+                
+                return temp_file
         finally:
             # 캡처 후 윈도우 상태 복원 (예외 발생해도 실행)
             if window_to_hide and ui_was_visible:
                 window_to_hide.show()
+
+    def save_captured_image(self, filepath=None):
+        """
+        캡처한 이미지를 지정된 경로에 저장
+        :param filepath: 저장할 파일 경로 (None인 경우 기본 경로 사용)
+        :return: 저장된 파일 경로
+        """
+        if self.captured_image is None:
+            return None
+            
+        if filepath is None:
+            # 기본 저장 경로 사용
+            filename = self._generate_filename()
+            filepath = os.path.join(self.save_dir, filename)
+        
+        # 이미지 저장
+        self.captured_image.save(filepath)
+        return filepath
 
     def _generate_filename(self):
         """

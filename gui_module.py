@@ -293,8 +293,8 @@ class CaptureUI(QMainWindow):
 
     def save_image(self):
         """Save captured image"""
-        if not self.last_capture_path or not os.path.exists(self.last_capture_path):
-            QMessageBox.warning(self, "Save Error", "No captured image to save.")
+        if not hasattr(self.capture_module, 'captured_image') or self.capture_module.captured_image is None:
+            QMessageBox.warning(self, "저장 오류", "저장할 캡처 이미지가 없습니다.")
             return
         
         # Auto-generate filename (based on current date and time)
@@ -305,15 +305,21 @@ class CaptureUI(QMainWindow):
         file_path = os.path.join(self.default_save_dir, filename)
         
         try:
-            # Copy file
-            import shutil
-            shutil.copy2(self.last_capture_path, file_path)
-            self.statusBar().showMessage(f'Image has been saved')
-            
-            # Display success message
-            QMessageBox.information(self, "Save Complete", f"Image has been successfully saved.\n\nFile path: {file_path}")
+            # 캡처 모듈의 저장 함수 호출
+            saved_path = self.capture_module.save_captured_image(file_path)
+            if saved_path:
+                self.statusBar().showMessage(f'이미지가 저장되었습니다: {saved_path}')
+                
+                # Display success message
+                QMessageBox.information(
+                    self, 
+                    "저장 완료", 
+                    f"이미지가 성공적으로 저장되었습니다.\n\n파일 경로: {saved_path}"
+                )
+            else:
+                QMessageBox.warning(self, "저장 오류", "이미지 저장에 실패했습니다.")
         except Exception as e:
-            QMessageBox.critical(self, "Save Error", f"An error occurred while saving the file: {str(e)}")
+            QMessageBox.critical(self, "저장 오류", f"파일 저장 중 오류가 발생했습니다: {str(e)}")
 
     def resizeEvent(self, event):
         """Update preview when window size changes"""
