@@ -5,11 +5,11 @@ import mss
 import mss.tools
 
 class ScreenCapture:
-    def __init__(self, save_dir="captures", config_manager=None):
+    def __init__(self, config_manager=None, save_dir="captures"):
         """
         화면 캡처 모듈 초기화
-        :param save_dir: 캡처 이미지 저장 디렉토리
-        :param config_manager: 설정 관리자 인스턴스 (선택 사항)
+        :param config_manager: 설정 관리자 인스턴스
+        :param save_dir: 캡처 이미지 저장 디렉토리 (기본값)
         """
         self.config_manager = config_manager
         

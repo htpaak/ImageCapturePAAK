@@ -4,7 +4,7 @@ import time
 import datetime
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout, 
                            QWidget, QLabel, QFileDialog, QHBoxLayout, QMessageBox,
-                           QFrame, QSizePolicy, QToolTip, QStatusBar)
+                           QFrame, QSizePolicy, QToolTip, QStatusBar, QDesktopWidget)
 from PyQt5.QtGui import QPixmap, QIcon, QPainter, QPainterPath, QPen, QColor, QBrush, QFont
 from PyQt5.QtCore import Qt, QRect, QPoint, QRectF, QSize
 
@@ -27,12 +27,23 @@ class CaptureUI(QMainWindow):
             
         # Initialize UI
         self.initUI()
+        
+        # Center the window on screen
+        self.center_on_screen()
+
+    def center_on_screen(self):
+        """Center the window on the screen"""
+        screen_geometry = QDesktopWidget().availableGeometry()
+        window_geometry = self.frameGeometry()
+        center_point = screen_geometry.center()
+        window_geometry.moveCenter(center_point)
+        self.move(window_geometry.topLeft())
 
     def initUI(self):
         """Initialize UI"""
         # Basic window settings
         self.setWindowTitle('Snipix')
-        self.setGeometry(100, 100, 650, 550)
+        self.setGeometry(100, 100, 650, 550)  # Initial position will be overridden by center_on_screen
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #f5f5f5;

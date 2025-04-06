@@ -9,17 +9,17 @@ from gui_module import CaptureUI
 from config_module import ConfigManager
 
 def main():
-    # QApplication 인스턴스 생성
+    # 애플리케이션 초기화
     app = QApplication(sys.argv)
     app.setApplicationName('Snipix')
     
-    # 설정 관리자 인스턴스 생성
+    # 설정 관리자 초기화
     config_manager = ConfigManager()
     
-    # 캡처 모듈 인스턴스 생성 (설정 관리자 전달)
-    capture_module = ScreenCapture(config_manager=config_manager)
+    # 캡처 모듈 초기화 및 설정 전달
+    capture_module = ScreenCapture(config_manager)
     
-    # UI 인스턴스 생성 및 캡처 모듈 전달
+    # UI 초기화
     ui = CaptureUI(capture_module)
     
     # 애플리케이션 아이콘 설정 (Windows에서만 동작)
@@ -36,5 +36,5 @@ def main():
     # 애플리케이션 실행
     sys.exit(app.exec_())
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main() 
