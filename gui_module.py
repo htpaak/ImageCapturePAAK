@@ -308,14 +308,10 @@ class CaptureUI(QMainWindow):
             # 캡처 모듈의 저장 함수 호출
             saved_path = self.capture_module.save_captured_image(file_path)
             if saved_path:
-                self.statusBar().showMessage(f'이미지가 저장되었습니다: {saved_path}')
+                # 상태 표시줄에 저장 완료 메시지 표시 (3초 후 자동 사라짐)
+                self.statusBar().showMessage(f'이미지가 저장되었습니다: {saved_path}', 3000)
                 
-                # Display success message
-                QMessageBox.information(
-                    self, 
-                    "저장 완료", 
-                    f"이미지가 성공적으로 저장되었습니다.\n\n파일 경로: {saved_path}"
-                )
+                # 저장 버튼 비활성화하지 않고 계속 활성화 상태 유지
             else:
                 QMessageBox.warning(self, "저장 오류", "이미지 저장에 실패했습니다.")
         except Exception as e:
