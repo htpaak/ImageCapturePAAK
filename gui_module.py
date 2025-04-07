@@ -4,8 +4,9 @@ import time
 import datetime
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout, 
                            QWidget, QLabel, QFileDialog, QHBoxLayout, QMessageBox,
-                           QFrame, QSizePolicy, QToolTip, QStatusBar, QDesktopWidget)
-from PyQt5.QtGui import QPixmap, QIcon, QPainter, QPainterPath, QPen, QColor, QBrush, QFont
+                           QFrame, QSizePolicy, QToolTip, QStatusBar, QDesktopWidget,
+                           QShortcut)
+from PyQt5.QtGui import QPixmap, QIcon, QPainter, QPainterPath, QPen, QColor, QBrush, QFont, QKeySequence
 from PyQt5.QtCore import Qt, QRect, QPoint, QRectF, QSize
 
 class CaptureUI(QMainWindow):
@@ -28,6 +29,9 @@ class CaptureUI(QMainWindow):
         # Initialize UI
         self.initUI()
         
+        # 단축키 설정
+        self.setup_shortcuts()
+        
         # Center the window on screen
         self.center_on_screen()
 
@@ -43,7 +47,7 @@ class CaptureUI(QMainWindow):
         """Initialize UI"""
         # Basic window settings
         self.setWindowTitle('Snipix')
-        self.setGeometry(100, 100, 650, 550)  # Initial position will be overridden by center_on_screen
+        self.setGeometry(100, 100, 750, 750)  # 더 큰 창 크기로 설정
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #f5f5f5;
@@ -96,7 +100,7 @@ class CaptureUI(QMainWindow):
 
         # Full screen capture button
         self.capture_btn = QPushButton('Full Screen Capture')
-        self.capture_btn.setMinimumHeight(60)
+        self.capture_btn.setMinimumHeight(90)  # 60 * 1.5 = 90
         self.capture_btn.setToolTip('Capture the entire screen')
         self.capture_btn.setIcon(QIcon.fromTheme('camera-photo'))
         self.capture_btn.clicked.connect(self.capture_full_screen)
@@ -104,7 +108,7 @@ class CaptureUI(QMainWindow):
 
         # Area capture button
         self.area_btn = QPushButton('Rectangular Area Capture')
-        self.area_btn.setMinimumHeight(60)
+        self.area_btn.setMinimumHeight(90)  # 60 * 1.5 = 90
         self.area_btn.setToolTip('Drag to select an area to capture')
         self.area_btn.setIcon(QIcon.fromTheme('select-rectangular'))
         self.area_btn.clicked.connect(self.capture_area)
@@ -137,7 +141,7 @@ class CaptureUI(QMainWindow):
         self.preview_label = QLabel('The preview will be displayed here after capture')
         self.preview_label.setAlignment(Qt.AlignCenter)
         self.preview_label.setStyleSheet("color: #888888; font-size: 16px;")
-        self.preview_label.setMinimumHeight(280)
+        self.preview_label.setMinimumHeight(420)  # 280 * 1.5 = 420
         self.preview_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         preview_layout.addWidget(self.preview_label)
 
@@ -150,19 +154,20 @@ class CaptureUI(QMainWindow):
         
         # Save path display label
         self.path_label = QLabel(f'Save Path: {self.default_save_dir}')
-        self.path_label.setStyleSheet("font-size: 15px; color: #555555;")
+        self.path_label.setStyleSheet("font-size: 18px; color: #555555; padding: 8px 0;")
         save_layout.addWidget(self.path_label)
         
         # Set save path button
         self.path_btn = QPushButton('Change Path')
-        self.path_btn.setMinimumHeight(45)
+        self.path_btn.setMinimumHeight(68)  # 45 * 1.5 = 67.5
         self.path_btn.setMinimumWidth(150)
         self.path_btn.setToolTip('Change the save location for captured images')
         self.path_btn.setStyleSheet("""
             QPushButton {
                 background-color: rgba(241, 196, 15, 0.8);
-                font-size: 15px;
+                font-size: 16px;
                 color: white;
+                padding: 8px;
             }
             QPushButton:hover {
                 background-color: rgba(241, 196, 15, 0.9);
@@ -176,14 +181,15 @@ class CaptureUI(QMainWindow):
         
         # 윈도우 탐색기로 저장 디렉토리 열기 버튼
         self.open_folder_btn = QPushButton('Open Folder')
-        self.open_folder_btn.setMinimumHeight(45)
+        self.open_folder_btn.setMinimumHeight(68)  # 45 * 1.5 = 67.5
         self.open_folder_btn.setMinimumWidth(140)
         self.open_folder_btn.setToolTip('Open the save folder in file explorer')
         self.open_folder_btn.setStyleSheet("""
             QPushButton {
                 background-color: rgba(41, 128, 185, 0.8);
-                font-size: 15px;
+                font-size: 16px;
                 color: white;
+                padding: 8px;
             }
             QPushButton:hover {
                 background-color: rgba(41, 128, 185, 0.9);
@@ -200,14 +206,15 @@ class CaptureUI(QMainWindow):
         
         # Save button
         self.save_btn = QPushButton('Save')
-        self.save_btn.setMinimumHeight(45)
+        self.save_btn.setMinimumHeight(68)  # 45 * 1.5 = 67.5
         self.save_btn.setMinimumWidth(140)
         self.save_btn.setToolTip('Save the captured image')
         self.save_btn.setStyleSheet("""
             QPushButton {
                 background-color: rgba(231, 76, 60, 0.8);
-                font-size: 17px;
+                font-size: 18px;
                 color: white;
+                padding: 8px;
             }
             QPushButton:hover {
                 background-color: rgba(231, 76, 60, 0.9);
@@ -225,12 +232,24 @@ class CaptureUI(QMainWindow):
 
         # Status bar setup
         status_bar = QStatusBar()
-        status_bar.setStyleSheet("padding: 7px; font-size: 15px;")
+        status_bar.setStyleSheet("padding: 10px; font-size: 22px; min-height: 40px;")
         self.setStatusBar(status_bar)
         self.statusBar().showMessage('Ready')
 
         # Tooltip font setup
         QToolTip.setFont(QFont('Arial', 14))
+
+    def setup_shortcuts(self):
+        """단축키를 설정합니다."""
+        # 전체 캡처 단축키 (F10)
+        self.shortcut_full = QShortcut(QKeySequence('F10'), self)
+        self.shortcut_full.activated.connect(self.capture_full_screen)
+        self.capture_btn.setText('Full Screen Capture (F10)')
+        
+        # 영역 캡처 단축키 (F9)
+        self.shortcut_area = QShortcut(QKeySequence('F9'), self)
+        self.shortcut_area.activated.connect(self.capture_area)
+        self.area_btn.setText('Rectangular Area Capture (F9)')
 
     def capture_full_screen(self):
         """Perform full screen capture"""
