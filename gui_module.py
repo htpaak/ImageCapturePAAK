@@ -174,6 +174,27 @@ class CaptureUI(QMainWindow):
         self.path_btn.clicked.connect(self.set_save_path)
         save_layout.addWidget(self.path_btn)
         
+        # 윈도우 탐색기로 저장 디렉토리 열기 버튼
+        self.open_folder_btn = QPushButton('Open Folder')
+        self.open_folder_btn.setMinimumHeight(45)
+        self.open_folder_btn.setMinimumWidth(140)
+        self.open_folder_btn.setToolTip('Open the save folder in file explorer')
+        self.open_folder_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(41, 128, 185, 0.8);
+                font-size: 15px;
+                color: white;
+            }
+            QPushButton:hover {
+                background-color: rgba(41, 128, 185, 0.9);
+            }
+            QPushButton:pressed {
+                background-color: rgba(41, 128, 185, 1.0);
+            }
+        """)
+        self.open_folder_btn.clicked.connect(self.open_save_folder)
+        save_layout.addWidget(self.open_folder_btn)
+        
         # Add spacer (for right alignment)
         save_layout.addStretch()
         
@@ -322,6 +343,31 @@ class CaptureUI(QMainWindow):
         if hasattr(self, 'last_capture_path') and self.last_capture_path and os.path.exists(self.last_capture_path):
             self.update_preview(self.last_capture_path)
         super().resizeEvent(event)
+
+    def open_save_folder(self):
+        """저장 폴더를 파일 탐색기로 엽니다."""
+        # 저장 폴더가 존재하는지 확인
+        if not os.path.exists(self.default_save_dir):
+            os.makedirs(self.default_save_dir)
+            
+        # 시스템에 맞는 명령으로 폴더 열기
+        import subprocess
+        import platform
+        
+        try:
+            if platform.system() == "Windows":
+                # Windows
+                os.startfile(self.default_save_dir)
+            elif platform.system() == "Darwin":
+                # macOS
+                subprocess.call(["open", self.default_save_dir])
+            else:
+                # Linux
+                subprocess.call(["xdg-open", self.default_save_dir])
+                
+            self.statusBar().showMessage(f'폴더를 열었습니다: {self.default_save_dir}', 3000)
+        except Exception as e:
+            QMessageBox.warning(self, "오류", f"폴더를 열 수 없습니다: {str(e)}")
 
 
 class AreaSelector(QWidget):
