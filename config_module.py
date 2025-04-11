@@ -12,18 +12,14 @@ class ConfigManager:
         설정 관리자 초기화
         :param config_file: 설정 파일 경로 (None이면 기본 경로 사용)
         """
-        # 설정 파일 저장 경로 설정 (C:\Snipix 폴더)
-        self.config_dir = os.path.join("C:\\", "Snipix")
+        # 설정 파일 저장 경로 설정 (사용자의 AppData\Local 폴더 내에 Snipix 폴더)
+        user_home = os.path.expanduser("~")
+        self.config_dir = os.path.join(user_home, "AppData", "Local", "Snipix")
         
         # 설정 폴더가 없으면 생성
         if not os.path.exists(self.config_dir):
-            try:
-                os.makedirs(self.config_dir)
-                print(f"설정 폴더 생성됨: {self.config_dir}")
-            except Exception as e:
-                print(f"설정 폴더 생성 실패: {e}")
-                # 생성 실패 시 현재 폴더로 대체
-                self.config_dir = os.path.abspath(".")
+            os.makedirs(self.config_dir)
+            print(f"설정 폴더 생성됨: {self.config_dir}")
         
         # 설정 파일 경로 설정
         if config_file is None:
@@ -34,7 +30,7 @@ class ConfigManager:
         print(f"설정 파일 경로: {self.config_file}")
             
         self.default_settings = {
-            "save_directory": os.path.join(os.path.expanduser("~"), "Pictures", "ScreenCaptures"),
+            "save_directory": os.path.join(os.path.expanduser("~"), "Pictures", "Screenshots"),
             "image_format": "png",
             "show_preview": True,
             "auto_copy_to_clipboard": False,
@@ -44,8 +40,12 @@ class ConfigManager:
         self.settings = self.load_settings()
         
         # 저장 디렉토리가 존재하지 않으면 생성
-        if not os.path.exists(self.settings["save_directory"]):
-            os.makedirs(self.settings["save_directory"])
+        save_dir = os.path.normpath(self.settings["save_directory"])  # 경로 정규화
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+            print(f"저장 경로 생성: {save_dir}")
+        # 경로 정규화 후 다시 설정
+        self.settings["save_directory"] = save_dir
 
     def load_settings(self):
         """

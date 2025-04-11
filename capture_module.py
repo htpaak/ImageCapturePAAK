@@ -372,7 +372,15 @@ class ScreenCapture:
         if filepath is None:
             # 기본 저장 경로 사용
             filename = self._generate_filename()
-            filepath = os.path.join(self.save_dir, filename)
+            # 경로 구분자 정규화
+            save_dir = os.path.normpath(self.save_dir)
+            filepath = os.path.join(save_dir, filename)
+        
+        # 저장 디렉토리가 존재하는지 확인하고 없으면 생성
+        directory = os.path.dirname(filepath)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+            print(f"저장 디렉토리 생성: {directory}")
         
         # 이미지 저장
         self.captured_image.save(filepath)
@@ -392,10 +400,17 @@ class ScreenCapture:
         :param directory: 새 저장 디렉토리 경로
         """
         if directory and directory != self.save_dir:
-            self.save_dir = directory
+            # 경로 정규화 (잘못된 구분자 수정)
+            normalized_dir = os.path.normpath(directory)
+            self.save_dir = normalized_dir
+            
             if not os.path.exists(self.save_dir):
                 os.makedirs(self.save_dir)
             
             # 설정 관리자가 있으면 설정도 업데이트
             if self.config_manager:
-                self.config_manager.update_setting("save_directory", directory) 
+                self.config_manager.update_setting("save_directory", normalized_dir)
+                
+            print(f"저장 경로 설정 완료: {self.save_dir}")
+        else:
+            print(f"저장 경로가 이미 설정되어 있습니다: {self.save_dir}") 
