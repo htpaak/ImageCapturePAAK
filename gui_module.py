@@ -9,6 +9,9 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout
 from PyQt5.QtGui import QPixmap, QIcon, QPainter, QPainterPath, QPen, QColor, QBrush, QFont, QKeySequence
 from PyQt5.QtCore import Qt, QRect, QPoint, QRectF, QSize
 
+# utils.py에서 함수 가져오기
+from utils import get_resource_path
+
 class CaptureUI(QMainWindow):
     def __init__(self, capture_module):
         super().__init__()
@@ -89,7 +92,7 @@ class CaptureUI(QMainWindow):
         
         # 아이콘 레이블
         icon_label = QLabel()
-        icon_path = os.path.join('assets', 'icon.ico')
+        icon_path = get_resource_path(os.path.join('assets', 'icon.ico'))
         if os.path.exists(icon_path):
             pixmap = QPixmap(icon_path).scaled(48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             icon_label.setPixmap(pixmap)
