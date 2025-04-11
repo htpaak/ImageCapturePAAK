@@ -10,6 +10,8 @@ from PyQt5.QtGui import QPixmap, QIcon, QPainter, QPainterPath, QPen, QColor, QB
 from PyQt5.QtCore import Qt, QRect, QPoint, QRectF, QSize, QTimer, QEvent
 import win32gui
 import win32con
+import win32process
+import win32api  # 윈도우 API 추가
 
 # utils.py에서 함수 가져오기
 from utils import get_resource_path
@@ -347,6 +349,45 @@ class CaptureUI(QMainWindow):
         self.shortcut_window.activated.connect(self.capture_window)
         self.window_btn.setText('Window Capture (F8)')
 
+    def _force_window_to_foreground(self):
+        """윈도우 API를 사용하여 창을 강제로 최상위로 가져옵니다"""
+        try:
+            # 현재 창의 핸들 가져오기
+            hwnd = int(self.winId())
+            
+            # 현재 포그라운드 창 핸들
+            foreground_hwnd = win32gui.GetForegroundWindow()
+            
+            # 이미 앞에 있다면 추가 작업 불필요
+            if hwnd == foreground_hwnd:
+                return
+                
+            # 현재 포그라운드 창의 스레드 ID 가져오기
+            foreground_thread = win32process.GetWindowThreadProcessId(foreground_hwnd)[0]
+            # 현재 창의 스레드 ID 가져오기
+            current_thread = win32api.GetCurrentThreadId()
+            
+            # 키보드 상태를 연결하여 포커스 변경 허용
+            if foreground_thread != current_thread:
+                win32process.AttachThreadInput(foreground_thread, current_thread, True)
+                # 창을 최상위로 가져오기
+                win32gui.BringWindowToTop(hwnd)
+                win32gui.SetForegroundWindow(hwnd)
+                # 키보드 상태 연결 해제
+                win32process.AttachThreadInput(foreground_thread, current_thread, False)
+            else:
+                # 직접 최상위로 설정
+                win32gui.SetForegroundWindow(hwnd)
+                
+            # 알트 키를 시뮬레이션하여 창 활성화 돕기
+            win32api.keybd_event(win32con.VK_MENU, 0, 0, 0)  # ALT 키 누름
+            win32api.keybd_event(win32con.VK_MENU, 0, win32con.KEYEVENTF_KEYUP, 0)  # ALT 키 해제
+            
+            print("강제 창 활성화 완료")
+            
+        except Exception as e:
+            print(f"창 활성화 중 오류: {e}")
+
     def capture_full_screen(self):
         """Perform full screen capture"""
         self.statusBar().showMessage('Capturing full screen...')
@@ -354,9 +395,16 @@ class CaptureUI(QMainWindow):
         # 캡처 모듈에 현재 창 객체를 전달하여 캡처 중 숨김 처리
         self.last_capture_path = self.capture_module.capture_full_screen(window_to_hide=self)
         
-        # Update preview
-        self.update_preview(self.last_capture_path)
+        # 캡처 후 창 바로 표시 및 활성화
+        if not self.isVisible():
+            self.show()
+            self.activateWindow()
+            self.raise_()
+            # 강제 활성화 추가
+            QTimer.singleShot(100, self._force_window_to_foreground)
         
+        # 미리보기 업데이트 (지연 없이 바로 실행)
+        self.update_preview(self.last_capture_path)
         self.statusBar().showMessage('Full screen capture completed - Press Save button to save the image')
         self.save_btn.setEnabled(True)
 
@@ -404,6 +452,8 @@ class CaptureUI(QMainWindow):
             self.show()
             self.activateWindow()
             self.raise_()
+            # 강제 활성화 추가
+            QTimer.singleShot(100, self._force_window_to_foreground)
             return
         
         # 캡처 실행
@@ -415,6 +465,8 @@ class CaptureUI(QMainWindow):
                 self.show()
                 self.activateWindow()
                 self.raise_()
+                # 강제 활성화 추가
+                QTimer.singleShot(100, self._force_window_to_foreground)
                 return
                 
             # 창 정보 확인
@@ -424,25 +476,30 @@ class CaptureUI(QMainWindow):
             # 선택한 창 캡처 (hwnd를 전달하여 해당 창만 캡처)
             self.last_capture_path = self.capture_module.capture_window(window_to_hide=self, hwnd=hwnd)
             
-            # 창 보이기 및 활성화
+            # 창 즉시 표시 및 활성화
             if not self.isVisible():
                 self.show()
                 self.activateWindow()
                 self.raise_()
+                # 강제 활성화 추가
+                QTimer.singleShot(100, self._force_window_to_foreground)
             
             # 미리보기 업데이트
             self.update_preview(self.last_capture_path)
             
-            # 캡처된 창 이름 표시 (빈 문자열이면 기본 메시지 사용)
-            window_name = window_title if window_title else title if title else "선택한 창"
+            # 캡처된 창 이름 표시
+            window_name = window_title if window_title else "선택한 창"
             self.statusBar().showMessage(f'"{window_name}" 창 캡처가 완료되었습니다 - 저장 버튼을 눌러 이미지를 저장하세요')
             self.save_btn.setEnabled(True)
+            
         except Exception as e:
             print(f"창 캡처 처리 중 오류 발생: {e}")
             if not self.isVisible():
                 self.show()
                 self.activateWindow()
                 self.raise_()
+                # 강제 활성화 추가
+                QTimer.singleShot(100, self._force_window_to_foreground)
             self.statusBar().showMessage(f'캡처 실패: {str(e)}')
             QMessageBox.warning(self, "캡처 오류", f"화면 캡처 중 오류가 발생했습니다: {str(e)}")
 
@@ -458,11 +515,15 @@ class CaptureUI(QMainWindow):
         self.last_capture_path = self.capture_module.capture_area(
             rect.x(), rect.y(), rect.width(), rect.height(), window_to_hide=self)
         
-        # 창이 보이는지 확인
+        # 창 즉시 표시 및 활성화
         if not self.isVisible():
             self.show()
+            self.activateWindow()
+            self.raise_()
+            # 강제 활성화 추가
+            QTimer.singleShot(100, self._force_window_to_foreground)
             
-        # Update preview
+        # 미리보기 업데이트
         self.update_preview(self.last_capture_path)
         self.statusBar().showMessage('Area capture completed - Press Save button to save the image')
         self.save_btn.setEnabled(True)
