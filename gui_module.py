@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout
                            QFrame, QSizePolicy, QToolTip, QStatusBar, QDesktopWidget,
                            QShortcut, QDialog, QListWidget, QListWidgetItem, QAbstractItemView)
 from PyQt5.QtGui import QPixmap, QIcon, QPainter, QPainterPath, QPen, QColor, QBrush, QFont, QKeySequence, QCursor
-from PyQt5.QtCore import Qt, QRect, QPoint, QRectF, QSize, QTimer
+from PyQt5.QtCore import Qt, QRect, QPoint, QRectF, QSize, QTimer, QEvent
 import win32gui
 import win32con
 
@@ -182,7 +182,7 @@ class CaptureUI(QMainWindow):
         preview_frame.setMinimumHeight(360)  # 16:9 비율에 맞게 설정
         
         # 프레임 크기 정책 설정 - Preferred로 설정해서 레이아웃 내에서는 크기 유지
-        sizePolicy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        sizePolicy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         sizePolicy.setHeightForWidth(True)  # 너비에 따라 높이 비율 유지
         preview_frame.setSizePolicy(sizePolicy)
         
@@ -192,19 +192,25 @@ class CaptureUI(QMainWindow):
             
         preview_frame.heightForWidth = height_for_width
         
+        # 프레임 레이아웃 설정 - 여백 제거
         preview_layout = QVBoxLayout(preview_frame)
+        preview_layout.setContentsMargins(0, 0, 0, 0)  # 여백 제거
+        preview_layout.setSpacing(0)  # 간격 제거
 
         # Preview label
         self.preview_label = QLabel('The preview will be displayed here after capture')
         self.preview_label.setAlignment(Qt.AlignCenter)
         self.preview_label.setStyleSheet("color: #888888; font-size: 16px;")
-        self.preview_label.setMinimumHeight(420)  # 280 * 1.5 = 420
+        self.preview_label.setMinimumHeight(360)  # 16:9 비율에 맞게 설정
         
-        # 고정 크기 정책으로 설정 - 이미지에 맞게 늘어나지 않음
-        self.preview_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        # 레이블 크기 정책 설정 - 컨테이너를 채우도록 설정
+        self.preview_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
         # 텍스트 줄바꿈 활성화
         self.preview_label.setWordWrap(True)
+        
+        # 레이블 배경색 설정
+        self.preview_label.setAutoFillBackground(True)
         
         preview_layout.addWidget(self.preview_label)
 
@@ -475,7 +481,7 @@ class CaptureUI(QMainWindow):
             # 레이블 최대 크기 가져오기
             label_size = self.preview_label.size()
             
-            # 레이블 크기에 맞게 이미지 스케일링
+            # 레이블 크기에 맞게 이미지 스케일링 (꽉 차게 표시)
             scaled_pixmap = pixmap.scaled(
                 label_size.width(),
                 label_size.height(),
@@ -485,7 +491,7 @@ class CaptureUI(QMainWindow):
             
             # 스케일링된 이미지 설정
             self.preview_label.setPixmap(scaled_pixmap)
-            self.preview_label.setStyleSheet("")  # 스타일 초기화
+            self.preview_label.setStyleSheet("background-color: black;")  # 검은색 배경 추가
             
             # 콘솔에 디버깅 정보 출력
             print(f"원본 이미지 크기: {pixmap.width()}x{pixmap.height()}, "
@@ -494,7 +500,7 @@ class CaptureUI(QMainWindow):
         else:
             # 이미지를 찾을 수 없는 경우
             self.preview_label.setText('Cannot load image')
-            self.preview_label.setStyleSheet("color: #888888; font-size: 16px;")
+            self.preview_label.setStyleSheet("color: #888888; font-size: 16px; background-color: white;")
 
     def set_save_path(self):
         """Set save path"""
@@ -549,6 +555,17 @@ class CaptureUI(QMainWindow):
         
         # 부모 클래스의 resizeEvent 호출
         super().resizeEvent(event)
+        
+    def changeEvent(self, event):
+        """창 상태가 변경될 때 호출되는 이벤트 핸들러"""
+        if event.type() == QEvent.WindowStateChange:
+            # 창이 최대화되거나 복원될 때 프리뷰 업데이트
+            if hasattr(self, 'last_capture_path') and self.last_capture_path and os.path.exists(self.last_capture_path):
+                # 약간의 지연 후 업데이트 (창 상태 변경이 완료된 후)
+                QTimer.singleShot(300, lambda: self.update_preview(self.last_capture_path))
+        
+        # 부모 클래스의 이벤트 핸들러 호출
+        super().changeEvent(event)
 
     def open_save_folder(self):
         """저장 폴더를 파일 탐색기로 엽니다."""
