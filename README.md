@@ -1,34 +1,65 @@
-# 고화질 화면 캡처 프로그램
+# Snipix
 
-이 프로그램은 모니터에 표시되는 화면을 고화질로 캡처하여 PNG 형식으로 저장할 수 있는 도구입니다.
+Snipix is a powerful screen capture tool that allows you to take high-quality screenshots of your screen, selected areas, or specific windows with just a few clicks.
 
-## 기능
+[![GitHub release](https://img.shields.io/github/release/htpaak/Snipix.svg?logo=github)](https://github.com/htpaak/Snipix/releases/latest)
+[![GitHub downloads](https://img.shields.io/github/downloads/htpaak/Snipix/latest/total.svg?logo=github)](https://github.com/htpaak/Snipix/releases/latest)
+[![GitHub downloads](https://img.shields.io/github/downloads/htpaak/Snipix/total.svg?logo=github)](https://github.com/htpaak/Snipix/releases)
 
-- 고화질 화면 캡처
-- 직관적인 GUI 인터페이스 (PyQt5 기반)
-- PNG 형식으로 이미지 저장
-- 전체 화면 또는 선택 영역 캡처 지원
+## Links
 
-## 필요 사항
+- [Download](https://github.com/htpaak/Snipix/releases/latest)
+- [GitHub Repository](https://github.com/htpaak/Snipix)
+- [Feedback](https://github.com/htpaak/Snipix/discussions)
 
-- Python 3.7 이상
-- 의존성 라이브러리:
-  - PyQt5: GUI 인터페이스
-  - Pillow: 이미지 처리
-  - mss: 고화질 화면 캡처
-  - PyAutoGUI: 화면 제어
-  - python-dotenv: 환경 변수 관리
+## Features
 
-## 설치 및 실행
+- **Full Screen Capture**: Capture your entire screen with a single hotkey (F10)
+- **Rectangular Area Capture**: Select and capture a specific area of your screen (F9)
+- **Window Capture**: Capture a specific application window with automatic detection (F8)
+- **High-Quality Images**: All captures are saved in high-quality PNG format
+- **Preview Functionality**: Preview your captures before saving
+- **Intuitive User Interface**: Clean and easy-to-use interface for all users
 
-1. 의존성 설치:
+## Demo
 
-```
-pip install -r requirements.txt
-```
+![Demo - Snipix Interface](assets/Demo_1.png)
 
-2. 프로그램 실행:
+## System Requirements
 
-```
-python main.py
-```
+- Windows 7/8/10/11
+- 50MB of free disk space
+- No special hardware requirements
+
+## Installation
+
+1. Download the latest release from the [releases page](https://github.com/htpaak/Snipix/releases/latest)
+2. Run the installer or extract the portable version
+3. Launch Snipix and start capturing!
+
+## Usage
+
+1. Launch Snipix
+2. Select your preferred capture method:
+   - Full Screen Capture (F10)
+   - Rectangular Area Capture (F9)
+   - Window Capture (F8)
+3. After capturing, preview your screenshot
+4. Click "Save" to save the image to your chosen location
+
+## Development
+
+Built with:
+- Python 3.9
+- PyQt5 for the user interface
+- MSS for screen capture functionality
+- Pillow for image processing
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgments
+
+- Thanks to all the contributors who have helped with development
+- Special thanks to the open-source libraries that made this project possible
