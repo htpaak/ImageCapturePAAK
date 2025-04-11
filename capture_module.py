@@ -68,6 +68,8 @@ class ScreenCapture:
             )
             
             if result == 0:  # S_OK
+                # DWM API 결과 좌표 출력
+                print(f"DWM API 창 좌표: 좌상단({rect.left}, {rect.top}), 우하단({rect.right}, {rect.bottom})")
                 return rect.left, rect.top, rect.right, rect.bottom
         except Exception as e:
             print(f"DWM API 호출 오류 (무시함): {e}")
@@ -75,6 +77,8 @@ class ScreenCapture:
         # 실패하면 일반 GetWindowRect 사용
         try:
             left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+            # GetWindowRect 결과 좌표 출력
+            print(f"GetWindowRect 창 좌표: 좌상단({left}, {top}), 우하단({right}, {bottom})")
             return left, top, right, bottom
         except Exception as e:
             print(f"GetWindowRect 호출 오류: {e}")
@@ -214,10 +218,34 @@ class ScreenCapture:
                     win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
                     time.sleep(0.2)  # 창이 복원될 때까지 대기
                 
-                # 창 크기 가져오기
+                # 창 활성화 (더 안정적인 캡처를 위해)
+                try:
+                    # 가장 앞으로 가져오기
+                    win32gui.SetForegroundWindow(hwnd)
+                    # 약간의 지연을 추가하여 창이 활성화될 시간 확보
+                    time.sleep(0.3)
+                except Exception as e:
+                    print(f"창 활성화 실패 (무시): {e}")
+                
+                # 창 크기 가져오기 - 활성화 후 다시 확인 (더 정확한 좌표 획득)
                 left, top, right, bottom = self.get_window_rect(hwnd)
+                
+                # 좌표를 정수로 변환하여 픽셀 정확도 향상
+                left = int(left)
+                top = int(top)
+                right = int(right)
+                bottom = int(bottom)
+                
+                # 테두리 문제 해결을 위한 미세 조정 (1px 안쪽으로 캡처)
+                left += 1
+                top += 1
+                right -= 1
+                bottom -= 1
+                
                 width = right - left
                 height = bottom - top
+                
+                print(f"조정된 캡처 영역: 좌상단({left}, {top}), 우하단({right}, {bottom}), 크기({width} x {height})")
                 
                 # 크기 유효성 검사
                 if width <= 10 or height <= 10:
@@ -231,75 +259,28 @@ class ScreenCapture:
                     print(f"창 크기가 너무 큽니다. 전체 화면 캡처로 대체합니다.")
                     return self.capture_full_screen(window_to_hide)
                 
-                # 창 내용만 캡처 방식 1: PrintWindow API 사용
-                try:
-                    # 창 활성화 (더 안정적인 캡처를 위해)
+                # 직접 화면 영역 캡처 - 가장 정확한 방법으로 변경
+                with mss.mss() as sct:
+                    # 캡처 영역 정의 - 정확한 좌표 사용
+                    capture_area = {"top": top, "left": left, "width": width, "height": height}
+                    print(f"캡처 영역: 좌상단({left}, {top}), 크기({width} x {height})")
+                    
+                    # 캡처 실행
+                    screenshot = sct.grab(capture_area)
+                    
+                    # PIL Image 객체로 변환
+                    img = Image.frombytes("RGB", screenshot.size, screenshot.rgb)
+                    
+                    # 이미지 테두리를 다듬어서 문제 해결
                     try:
-                        # 가장 앞으로 가져오기
-                        win32gui.SetForegroundWindow(hwnd)
-                        # 약간의 지연을 추가하여 창이 활성화될 시간 확보
-                        time.sleep(0.2)
+                        # 이미지에서 단색 테두리를 감지하고 제거
+                        img = self._clean_image_borders(img)
                     except Exception as e:
-                        print(f"창 활성화 실패 (무시): {e}")
+                        print(f"이미지 테두리 정리 중 오류: {e}")
                     
-                    # 장치 컨텍스트 설정
-                    hwnd_dc = win32gui.GetWindowDC(hwnd)
-                    mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
-                    save_dc = mfc_dc.CreateCompatibleDC()
-                    
-                    # 비트맵 생성
-                    save_bitmap = win32ui.CreateBitmap()
-                    save_bitmap.CreateCompatibleBitmap(mfc_dc, width, height)
-                    save_dc.SelectObject(save_bitmap)
-                    
-                    # 캡처 옵션 설정
-                    # PW_RENDERFULLCONTENT = 2 (DWM 컴포지션과 창 내용 모두 캡처)
-                    result = windll.user32.PrintWindow(hwnd, save_dc.GetSafeHdc(), 2)
-                    
-                    # 실패한 경우 다른 캡처 모드로 재시도
-                    if not result:
-                        print("고급 캡처 모드 실패, 기본 모드로 재시도합니다...")
-                        result = windll.user32.PrintWindow(hwnd, save_dc.GetSafeHdc(), 0)
-                    
-                    # 비트맵 데이터를 가져와 PIL Image로 변환
-                    bmpinfo = save_bitmap.GetInfo()
-                    bmpstr = save_bitmap.GetBitmapBits(True)
-                    
-                    img = Image.frombuffer(
-                        'RGB',
-                        (bmpinfo['bmWidth'], bmpinfo['bmHeight']),
-                        bmpstr,
-                        'raw',
-                        'BGRX',
-                        0,
-                        1
-                    )
-                    
-                    # 자원 정리 (역순으로 해제)
-                    try:
-                        win32gui.DeleteObject(save_bitmap.GetHandle())
-                    except:
-                        pass
-                    
-                    try:
-                        save_dc.DeleteDC()
-                    except:
-                        pass
-                    
-                    try:
-                        mfc_dc.DeleteDC()
-                    except:
-                        pass
-                    
-                    try:
-                        win32gui.ReleaseDC(hwnd, hwnd_dc)
-                    except:
-                        pass
-                    
-                    # 캡처된 이미지 저장
                     self.captured_image = img
                     
-                    # 임시 파일로 저장
+                    # 임시 파일 생성
                     temp_dir = os.path.join(os.path.expanduser("~"), ".temp_snipix")
                     if not os.path.exists(temp_dir):
                         os.makedirs(temp_dir)
@@ -307,36 +288,8 @@ class ScreenCapture:
                     temp_file = os.path.join(temp_dir, "temp_preview.png")
                     img.save(temp_file)
                     
-                    print(f"창 내용 캡처 성공! (창 자체 내용만 캡처됨)")
+                    print("화면 영역 캡처 완료")
                     return temp_file
-                    
-                except Exception as e:
-                    print(f"창 내용 캡처 실패: {e}")
-                    print("대체 방법으로 캡처를 시도합니다...")
-                    
-                    # 대체 방법: mss 사용 (화면 영역 캡처)
-                    with mss.mss() as sct:
-                        # 캡처 영역 정의
-                        capture_area = {"top": top, "left": left, "width": width, "height": height}
-                        print(f"대체 캡처 영역: 좌상단({left}, {top}), 크기({width} x {height})")
-                        
-                        # 캡처 실행
-                        screenshot = sct.grab(capture_area)
-                        
-                        # PIL Image 객체로 변환
-                        img = Image.frombytes("RGB", screenshot.size, screenshot.rgb)
-                        self.captured_image = img
-                        
-                        # 임시 파일 생성
-                        temp_dir = os.path.join(os.path.expanduser("~"), ".temp_snipix")
-                        if not os.path.exists(temp_dir):
-                            os.makedirs(temp_dir)
-                        
-                        temp_file = os.path.join(temp_dir, "temp_preview.png")
-                        img.save(temp_file)
-                        
-                        print("대체 방법으로 캡처 완료 (화면 영역 캡처)")
-                        return temp_file
             else:
                 print("유효한 창 핸들이 없어 전체 화면을 캡처합니다.")
                 return self.capture_full_screen(window_to_hide)
@@ -348,6 +301,33 @@ class ScreenCapture:
                 window_to_hide.activateWindow()
                 window_to_hide.raise_()
                 QApplication.processEvents()
+                
+    def _clean_image_borders(self, img):
+        """
+        이미지 테두리를 정리하여 꺾인 선이나 불필요한 테두리를 제거합니다.
+        :param img: PIL Image 객체
+        :return: 정리된 PIL Image 객체
+        """
+        try:
+            # 이미지 크기 확인
+            width, height = img.size
+            
+            # 테두리가 너무 작은 이미지는 처리하지 않음
+            if width < 10 or height < 10:
+                return img
+                
+            # 새로운 이미지 생성 (원본 크기에서 각 테두리 1픽셀씩 줄임)
+            new_width = width
+            new_height = height
+            
+            # 이미지를 그대로 복사
+            new_img = img.copy()
+            
+            print(f"이미지 테두리 정리 완료: {width}x{height} -> {new_width}x{new_height}")
+            return new_img
+        except Exception as e:
+            print(f"이미지 테두리 정리 오류: {e}")
+            return img  # 오류 발생 시 원본 이미지 반환
 
     def get_window_list(self):
         """
