@@ -50,7 +50,8 @@ class CaptureUI(QMainWindow):
         """Initialize UI"""
         # Basic window settings
         self.setWindowTitle('Snipix')
-        self.setGeometry(100, 100, 750, 750)  # 더 큰 창 크기로 설정
+        # 창 크기 설정: 가로 크기를 1000px로 설정
+        self.setGeometry(100, 100, 1000, 750)
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #f5f5f5;
@@ -175,19 +176,41 @@ class CaptureUI(QMainWindow):
         # Add preview frame
         main_layout.addWidget(preview_frame)
 
-        # Save button layout
-        save_layout = QHBoxLayout()
-        save_layout.setSpacing(15)
+        # 하단 영역 레이아웃 개선 - 경로 표시와 버튼을 분리
+        bottom_layout = QVBoxLayout()
+        bottom_layout.setSpacing(10)
         
-        # Save path display label
-        self.path_label = QLabel(f'Save Path: {self.default_save_dir}')
-        self.path_label.setStyleSheet("font-size: 18px; color: #555555; padding: 8px 0;")
-        save_layout.addWidget(self.path_label)
+        # 경로 표시 영역
+        path_info_layout = QHBoxLayout()
+        path_info_layout.setSpacing(5)
         
-        # Set save path button
+        # 경로 레이블 - 고정 너비 설정
+        path_label_prefix = QLabel('Save Path:')
+        path_label_prefix.setStyleSheet("font-size: 18px; color: #555555; padding: 8px 0;")
+        path_label_prefix.setFixedWidth(100)
+        path_info_layout.addWidget(path_label_prefix)
+        
+        # 경로 내용 (스크롤 가능한 영역)
+        self.path_content = QLabel(self.default_save_dir)
+        self.path_content.setStyleSheet("font-size: 18px; color: #555555; padding: 8px 0; background-color: #f9f9f9; border-radius: 4px;")
+        self.path_content.setMinimumWidth(200)
+        self.path_content.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        path_info_layout.addWidget(self.path_content, 1)  # 1은 stretch factor로, 공간이 있으면 확장됨
+        
+        # 경로 표시 영역 추가
+        bottom_layout.addLayout(path_info_layout)
+        
+        # 버튼 영역
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(15)
+        
+        # 왼쪽에 스페이서 추가
+        button_layout.addStretch(1)
+        
+        # Change Path 버튼
         self.path_btn = QPushButton('Change Path')
-        self.path_btn.setMinimumHeight(68)  # 45 * 1.5 = 67.5
-        self.path_btn.setMinimumWidth(150)
+        self.path_btn.setMinimumHeight(68)
+        self.path_btn.setFixedWidth(150)
         self.path_btn.setToolTip('Change the save location for captured images')
         self.path_btn.setStyleSheet("""
             QPushButton {
@@ -204,12 +227,12 @@ class CaptureUI(QMainWindow):
             }
         """)
         self.path_btn.clicked.connect(self.set_save_path)
-        save_layout.addWidget(self.path_btn)
+        button_layout.addWidget(self.path_btn)
         
         # 윈도우 탐색기로 저장 디렉토리 열기 버튼
         self.open_folder_btn = QPushButton('Open Folder')
-        self.open_folder_btn.setMinimumHeight(68)  # 45 * 1.5 = 67.5
-        self.open_folder_btn.setMinimumWidth(140)
+        self.open_folder_btn.setMinimumHeight(68)
+        self.open_folder_btn.setFixedWidth(150)
         self.open_folder_btn.setToolTip('Open the save folder in file explorer')
         self.open_folder_btn.setStyleSheet("""
             QPushButton {
@@ -226,15 +249,12 @@ class CaptureUI(QMainWindow):
             }
         """)
         self.open_folder_btn.clicked.connect(self.open_save_folder)
-        save_layout.addWidget(self.open_folder_btn)
+        button_layout.addWidget(self.open_folder_btn)
         
-        # Add spacer (for right alignment)
-        save_layout.addStretch()
-        
-        # Save button
+        # Save 버튼
         self.save_btn = QPushButton('Save')
-        self.save_btn.setMinimumHeight(68)  # 45 * 1.5 = 67.5
-        self.save_btn.setMinimumWidth(140)
+        self.save_btn.setMinimumHeight(68)
+        self.save_btn.setFixedWidth(150)
         self.save_btn.setToolTip('Save the captured image')
         self.save_btn.setStyleSheet("""
             QPushButton {
@@ -252,10 +272,13 @@ class CaptureUI(QMainWindow):
         """)
         self.save_btn.clicked.connect(self.save_image)
         self.save_btn.setEnabled(False)
-        save_layout.addWidget(self.save_btn)
+        button_layout.addWidget(self.save_btn)
         
-        # Add save button layout
-        main_layout.addLayout(save_layout)
+        # 버튼 영역 추가
+        bottom_layout.addLayout(button_layout)
+        
+        # 전체 하단 레이아웃 추가
+        main_layout.addLayout(bottom_layout)
 
         # Status bar setup
         status_bar = QStatusBar()
@@ -355,7 +378,7 @@ class CaptureUI(QMainWindow):
         
         if dir_path:
             self.default_save_dir = dir_path
-            self.path_label.setText(f'Save Path: {self.default_save_dir}')
+            self.path_content.setText(self.default_save_dir)
             
             # 캡처 모듈에 경로 변경 사항 전달 (설정 파일에도 저장됨)
             self.capture_module.set_save_directory(self.default_save_dir)
