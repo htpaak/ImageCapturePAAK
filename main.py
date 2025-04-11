@@ -24,11 +24,14 @@ def main():
     
     # 애플리케이션 아이콘 설정 (Windows에서만 동작)
     try:
-        # 만약 아이콘 파일이 있다면 사용
-        if os.path.exists('icon.ico'):
-            app.setWindowIcon(QIcon('icon.ico'))
-    except Exception:
-        pass
+        # assets 폴더에 있는 아이콘 파일 사용
+        icon_path = os.path.join('assets', 'icon.ico')
+        if os.path.exists(icon_path):
+            app.setWindowIcon(QIcon(icon_path))
+            # 창 제목 표시줄에도 아이콘 설정
+            ui.setWindowIcon(QIcon(icon_path))
+    except Exception as e:
+        print(f"아이콘 설정 중 오류 발생: {e}")
     
     # UI 표시
     ui.show()

@@ -82,11 +82,35 @@ class CaptureUI(QMainWindow):
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(15)
 
+        # 타이틀 레이아웃 (아이콘 + 텍스트)
+        title_layout = QHBoxLayout()
+        title_layout.setAlignment(Qt.AlignCenter)
+        title_layout.setSpacing(10)  # 아이콘과 텍스트 사이 간격 조정
+        
+        # 아이콘 레이블
+        icon_label = QLabel()
+        icon_path = os.path.join('assets', 'icon.ico')
+        if os.path.exists(icon_path):
+            pixmap = QPixmap(icon_path).scaled(48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            icon_label.setPixmap(pixmap)
+        icon_label.setAlignment(Qt.AlignVCenter)  # 수직 가운데 정렬
+        
         # Program title
         title_label = QLabel('Snipix')
-        title_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #333333; margin-bottom: 10px;")
-        title_label.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(title_label)
+        title_label.setStyleSheet("font-size: 28px; font-weight: bold; color: #333333;")
+        title_label.setAlignment(Qt.AlignVCenter)  # 수직 가운데 정렬
+        
+        # 컨테이너 위젯을 생성하여 아이콘과 텍스트를 담음
+        title_container = QWidget()
+        title_inner_layout = QHBoxLayout(title_container)
+        title_inner_layout.setContentsMargins(0, 0, 0, 0)  # 여백 제거
+        title_inner_layout.setSpacing(12)
+        title_inner_layout.addWidget(icon_label)
+        title_inner_layout.addWidget(title_label)
+        title_inner_layout.setAlignment(Qt.AlignCenter | Qt.AlignVCenter)
+        
+        # 타이틀 레이아웃에 컨테이너 추가
+        main_layout.addWidget(title_container, 0, Qt.AlignCenter)
 
         # Guide message
         guide_label = QLabel('Select the capture method you want')
