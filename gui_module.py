@@ -5,9 +5,11 @@ import datetime
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout, 
                            QWidget, QLabel, QFileDialog, QHBoxLayout, QMessageBox,
                            QFrame, QSizePolicy, QToolTip, QStatusBar, QDesktopWidget,
-                           QShortcut)
-from PyQt5.QtGui import QPixmap, QIcon, QPainter, QPainterPath, QPen, QColor, QBrush, QFont, QKeySequence
-from PyQt5.QtCore import Qt, QRect, QPoint, QRectF, QSize
+                           QShortcut, QDialog, QListWidget, QListWidgetItem, QAbstractItemView)
+from PyQt5.QtGui import QPixmap, QIcon, QPainter, QPainterPath, QPen, QColor, QBrush, QFont, QKeySequence, QCursor
+from PyQt5.QtCore import Qt, QRect, QPoint, QRectF, QSize, QTimer
+import win32gui
+import win32con
 
 # utils.py에서 함수 가져오기
 from utils import get_resource_path
@@ -129,6 +131,7 @@ class CaptureUI(QMainWindow):
         # Full screen capture button
         self.capture_btn = QPushButton('Full Screen Capture')
         self.capture_btn.setMinimumHeight(90)  # 60 * 1.5 = 90
+        self.capture_btn.setFixedWidth(300)  # 버튼 가로 크기 제한
         self.capture_btn.setToolTip('Capture the entire screen')
         self.capture_btn.setIcon(QIcon.fromTheme('camera-photo'))
         self.capture_btn.clicked.connect(self.capture_full_screen)
@@ -137,10 +140,20 @@ class CaptureUI(QMainWindow):
         # Area capture button
         self.area_btn = QPushButton('Rectangular Area Capture')
         self.area_btn.setMinimumHeight(90)  # 60 * 1.5 = 90
+        self.area_btn.setFixedWidth(300)  # 버튼 가로 크기 제한
         self.area_btn.setToolTip('Drag to select an area to capture')
         self.area_btn.setIcon(QIcon.fromTheme('select-rectangular'))
         self.area_btn.clicked.connect(self.capture_area)
         btn_layout.addWidget(self.area_btn)
+        
+        # Window capture button
+        self.window_btn = QPushButton('Window Capture')
+        self.window_btn.setMinimumHeight(90)  # 60 * 1.5 = 90
+        self.window_btn.setFixedWidth(300)  # 버튼 가로 크기 제한
+        self.window_btn.setToolTip('Capture the active window')
+        self.window_btn.setIcon(QIcon.fromTheme('window'))
+        self.window_btn.clicked.connect(self.capture_window)
+        btn_layout.addWidget(self.window_btn)
 
         # Add button layout
         main_layout.addLayout(btn_layout)
@@ -300,6 +313,11 @@ class CaptureUI(QMainWindow):
         self.shortcut_area = QShortcut(QKeySequence('F9'), self)
         self.shortcut_area.activated.connect(self.capture_area)
         self.area_btn.setText('Rectangular Area Capture (F9)')
+        
+        # 창 캡처 단축키 (F8)
+        self.shortcut_window = QShortcut(QKeySequence('F8'), self)
+        self.shortcut_window.activated.connect(self.capture_window)
+        self.window_btn.setText('Window Capture (F8)')
 
     def capture_full_screen(self):
         """Perform full screen capture"""
@@ -329,6 +347,76 @@ class CaptureUI(QMainWindow):
         self.area_selector.show()
         self.area_selector.activateWindow()
         self.area_selector.raise_()
+
+    def capture_window(self):
+        """마우스 호버로 캡처할 창을 선택"""
+        self.statusBar().showMessage('Move mouse over a window and click to capture it')
+        
+        # 현재 창을 일시적으로 숨김
+        self.hide()
+        QApplication.processEvents()  # UI 즉시 갱신
+        
+        # 다른 창이 활성화될 시간 확보 (짧게 조정)
+        time.sleep(0.2)
+        
+        # 창 선택 위젯 생성 및 표시
+        self.window_selector = WindowSelector(self)
+        
+        # 위젯 초기화 및 표시
+        QApplication.processEvents()  # UI 즉시 갱신
+        self.window_selector.show()
+        self.window_selector.activateWindow()
+        self.window_selector.raise_()
+
+    def process_window_selection(self, hwnd, title):
+        """선택한 창 캡처 처리"""
+        # 취소한 경우
+        if hwnd is None:
+            self.statusBar().showMessage('캡처가 취소되었습니다')
+            self.show()
+            self.activateWindow()
+            self.raise_()
+            return
+        
+        # 캡처 실행
+        try:
+            # 창이 유효한지 다시 확인
+            if not win32gui.IsWindow(hwnd):
+                print("유효하지 않은 창 핸들입니다.")
+                self.statusBar().showMessage('유효하지 않은 창입니다. 다시 시도해주세요.')
+                self.show()
+                self.activateWindow()
+                self.raise_()
+                return
+                
+            # 창 정보 확인
+            window_title = win32gui.GetWindowText(hwnd)
+            print(f"캡처할 창: {window_title} (핸들: {hwnd})")
+            
+            # 선택한 창 캡처 (hwnd를 전달하여 해당 창만 캡처)
+            self.last_capture_path = self.capture_module.capture_window(window_to_hide=self, hwnd=hwnd)
+            
+            # 창 보이기 및 활성화
+            if not self.isVisible():
+                self.show()
+                self.activateWindow()
+                self.raise_()
+            
+            # 미리보기 업데이트
+            self.update_preview(self.last_capture_path)
+            
+            # 캡처된 창 이름 표시 (빈 문자열이면 기본 메시지 사용)
+            window_name = window_title if window_title else title if title else "선택한 창"
+            self.statusBar().showMessage(f'"{window_name}" 창 캡처가 완료되었습니다 - 저장 버튼을 눌러 이미지를 저장하세요')
+            self.save_btn.setEnabled(True)
+        except Exception as e:
+            print(f"창 캡처 처리 중 오류 발생: {e}")
+            if not self.isVisible():
+                self.show()
+                self.activateWindow()
+                self.raise_()
+            self.statusBar().showMessage(f'캡처 실패: {str(e)}')
+            QMessageBox.warning(self, "캡처 오류", f"화면 캡처 중 오류가 발생했습니다: {str(e)}")
 
     def process_area_selection(self, rect):
         """Process area selection"""
@@ -443,6 +531,281 @@ class CaptureUI(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, "오류", f"폴더를 열 수 없습니다: {str(e)}")
 
+
+class WindowSelector(QWidget):
+    """마우스 호버로 캡처할 창을 선택하는 위젯"""
+    def __init__(self, parent=None):
+        super().__init__(None)
+        self.parent = parent
+        self.current_hwnd = None
+        self.current_title = ""
+        self.current_rect = None
+        
+        # 초기화 시 사용 가능한 창 목록 미리 가져오기
+        self.window_list = []
+        self.load_window_list()
+        
+        # UI 초기화
+        self.initUI()
+        
+        # 타이머로 마우스 위치 추적 (간격을 더 길게 설정)
+        self.hover_timer = QTimer(self)
+        self.hover_timer.timeout.connect(self.check_mouse_position)
+        self.hover_timer.start(300)  # 300ms 간격으로 마우스 추적 (깜빡임 최소화)
+        
+    def load_window_list(self):
+        """사용 가능한 모든 창 목록을 미리 가져옴"""
+        try:
+            self.window_list = []
+            
+            def enum_windows_proc(hwnd, results):
+                # 보이는 창만 추가
+                if win32gui.IsWindowVisible(hwnd) and not win32gui.IsIconic(hwnd):
+                    title = win32gui.GetWindowText(hwnd)
+                    # 빈 제목이나 "Snipix" 포함 창은 제외
+                    if title and "Snipix" not in title:
+                        # 실제 창 영역 가져오기
+                        try:
+                            left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+                            width = right - left
+                            height = bottom - top
+                            # 최소 크기 이상인 창만 추가
+                            if width > 100 and height > 100:
+                                # 창 핸들, 제목, 영역 저장
+                                self.window_list.append({
+                                    'hwnd': hwnd,
+                                    'title': title,
+                                    'rect': QRect(left, top, width, height)
+                                })
+                        except:
+                            pass
+                return True
+                
+            # 모든 창을 순회하며 목록 만들기
+            win32gui.EnumWindows(enum_windows_proc, None)
+            
+            # 창 목록이 있는지 확인
+            if self.window_list:
+                print(f"감지된 창 목록: {len(self.window_list)}개")
+            else:
+                print("감지된 창이 없습니다.")
+                
+        except Exception as e:
+            print(f"창 목록 로드 오류: {e}")
+            
+    def initUI(self):
+        """UI 초기화"""
+        # 전체 화면 크기로 설정
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setGeometry(QApplication.primaryScreen().geometry())
+        self.setCursor(Qt.CrossCursor)
+        
+        # 안내 텍스트 표시
+        self.info_label = QLabel("마우스를 창 위에 올리면 해당 창이 강조되고, 클릭하면 창 전체가 캡처됩니다. ESC 키를 누르면 취소됩니다.", self)
+        self.info_label.setStyleSheet("""
+            background-color: rgba(0, 0, 0, 180); 
+            color: white; 
+            padding: 12px; 
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+        """)
+        self.info_label.setAlignment(Qt.AlignCenter)
+        self.info_label.setFixedWidth(600)  # 텍스트가 잘리지 않도록 너비 확장
+        
+        # 화면 하단에 표시
+        rect = self.geometry()
+        self.info_label.move(
+            (rect.width() - self.info_label.width()) // 2,
+            rect.height() - self.info_label.height() - 60
+        )
+        
+    def find_window_at_position(self, pos):
+        """마우스 위치에 있는 창 찾기"""
+        for window in self.window_list:
+            if window['rect'].contains(pos):
+                return window
+        return None
+            
+    def check_mouse_position(self):
+        """마우스 위치에 있는 창 확인"""
+        try:
+            # 마우스 현재 위치 가져오기
+            cursor_pos = QCursor.pos()
+            
+            # 마우스 위치에 있는 창 찾기
+            window = self.find_window_at_position(cursor_pos)
+            
+            # 창을 찾았으면 정보 업데이트
+            if window:
+                # 이전과 같은 창이면 업데이트 불필요
+                if self.current_hwnd == window['hwnd'] and self.current_rect:
+                    return
+                    
+                # 새로운 창 정보 업데이트
+                self.current_hwnd = window['hwnd']
+                self.current_title = window['title']
+                self.current_rect = window['rect']
+                print(f"✓ 창 인식: '{window['title']}', 크기: {window['rect'].width()}x{window['rect'].height()}")
+                self.update()
+            else:
+                # 창을 찾지 못했으면 초기화
+                self.clear_current_window()
+                
+        except Exception as e:
+            print(f"창 감지 오류: {e}")
+            self.clear_current_window()
+
+    def clear_current_window(self):
+        """현재 창 정보 초기화"""
+        if self.current_rect or self.current_hwnd:
+            self.current_rect = None
+            self.current_title = ""
+            self.current_hwnd = None
+            self.update()
+    
+    def paintEvent(self, event):
+        """화면 표시"""
+        painter = QPainter(self)
+        
+        # 전체 화면에 반투명한 오버레이 그리기
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 80))  # 더 어둡게 만들어서 선택된 창을 강조
+        
+        # 현재 창 강조 표시
+        if self.current_rect and self.current_hwnd and self.current_title:
+            # 선택된 창 영역은 더 투명하게
+            highlight_area = QPainterPath()
+            highlight_area.addRect(QRectF(self.current_rect))
+            
+            # 선택된 창 영역만 투명하게 하기 위한 Path 설정
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(0, 0, 0, 10))  # 매우 투명한 배경
+            painter.drawRect(self.current_rect)
+            
+            # 테두리 그리기 (굵고 눈에 띄는 색상)
+            pen = QPen(QColor(0, 180, 255), 4)  # 더 두꺼운 테두리
+            painter.setPen(pen)
+            painter.drawRect(self.current_rect)
+            
+            # 창 제목 표시 영역 (상단에 표시)
+            title_bg_rect = QRect(
+                self.current_rect.x(),
+                max(0, self.current_rect.y() - 50),  # 창 위에 표시
+                min(500, self.current_rect.width()),  # 창 너비를 넘지 않도록
+                40  # 더 큰 높이
+            )
+            
+            # 창 제목 배경 (어두운 배경)
+            painter.setBrush(QColor(0, 0, 0, 180))
+            painter.setPen(Qt.NoPen)
+            painter.drawRoundedRect(title_bg_rect, 5, 5)  # 둥근 모서리
+            
+            # 창 제목 텍스트
+            painter.setPen(QColor(255, 255, 255))
+            font = painter.font()
+            font.setPointSize(11)  # 더 큰 폰트
+            font.setBold(True)
+            painter.setFont(font)
+            
+            # 창 제목이 너무 길면 잘라서 표시
+            display_title = self.current_title
+            if len(display_title) > 50:
+                display_title = display_title[:47] + "..."
+                
+            painter.drawText(title_bg_rect, Qt.AlignCenter, display_title)
+            
+            # 모서리 표시점 추가 (더 크고 눈에 띄게)
+            corner_size = 10
+            corner_color = QColor(0, 180, 255)
+            painter.setBrush(QBrush(corner_color))
+            painter.setPen(Qt.NoPen)
+            
+            # 왼쪽 상단
+            painter.drawRect(QRect(
+                self.current_rect.left() - corner_size//2, 
+                self.current_rect.top() - corner_size//2, 
+                corner_size, corner_size))
+            
+            # 오른쪽 상단
+            painter.drawRect(QRect(
+                self.current_rect.right() - corner_size//2, 
+                self.current_rect.top() - corner_size//2, 
+                corner_size, corner_size))
+            
+            # 왼쪽 하단
+            painter.drawRect(QRect(
+                self.current_rect.left() - corner_size//2, 
+                self.current_rect.bottom() - corner_size//2, 
+                corner_size, corner_size))
+            
+            # 오른쪽 하단
+            painter.drawRect(QRect(
+                self.current_rect.right() - corner_size//2, 
+                self.current_rect.bottom() - corner_size//2, 
+                corner_size, corner_size))
+            
+            # 창 크기 정보 표시 (오른쪽 하단에 표시)
+            size_text = f"{self.current_rect.width()} × {self.current_rect.height()} px"
+            size_bg_rect = QRect(
+                self.current_rect.right() - 150,
+                self.current_rect.bottom() + 10,
+                150,
+                30
+            )
+            
+            # 크기 정보 배경
+            painter.setBrush(QColor(0, 0, 0, 180))
+            painter.drawRoundedRect(size_bg_rect, 5, 5)
+            
+            # 크기 정보 텍스트
+            painter.setPen(QColor(255, 255, 255))
+            font = painter.font()
+            font.setPointSize(9)
+            painter.setFont(font)
+            painter.drawText(size_bg_rect, Qt.AlignCenter, size_text)
+    
+    def mousePressEvent(self, event):
+        """마우스 클릭 시 창 캡처"""
+        if event.button() == Qt.LeftButton:
+            # 타이머 정지
+            self.hover_timer.stop()
+            
+            # 현재 선택된 창 정보 저장
+            selected_hwnd = self.current_hwnd
+            selected_title = self.current_title
+            
+            # 선택기 숨김
+            self.hide()
+            QApplication.processEvents()
+            
+            # 현재 선택된 창이 있으면 캡처
+            if self.parent and selected_hwnd and self.current_rect:
+                # 선택된 창이 캡처될 시간을 확보하기 위해 약간 대기
+                time.sleep(0.1)
+                self.parent.process_window_selection(selected_hwnd, selected_title)
+                # 캡처 처리 후 선택기 종료
+                self.close()
+            else:
+                # 창을 선택하지 않았으면 취소로 처리
+                if self.parent:
+                    self.parent.show()
+                    self.parent.activateWindow()
+                    self.parent.raise_()
+                    self.parent.process_window_selection(None, "")
+                self.close()
+
+    def keyPressEvent(self, event):
+        """키 이벤트 처리"""
+        # ESC 키 처리
+        if event.key() == Qt.Key_Escape:
+            self.hover_timer.stop()
+            self.close()
+            if self.parent:
+                self.parent.show()
+                self.parent.activateWindow()  # 부모 창을 강제로 활성화
+                self.parent.raise_()  # 부모 창을 최상위로 가져옴
+                self.parent.process_window_selection(None, "")
 
 class AreaSelector(QWidget):
     """Widget for selecting screen area"""
