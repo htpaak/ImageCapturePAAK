@@ -22,8 +22,8 @@ class CaptureUI(QMainWindow):
         self.selection_rect = QRect()
         self.last_capture_path = None
         
-        # Initialize save path before initUI method
-        self.default_save_dir = os.path.join(os.path.expanduser("~"), "Pictures", "ScreenCaptures")
+        # 캡처 모듈의 저장 경로를 사용 (설정 파일에서 로드된 경로)
+        self.default_save_dir = self.capture_module.save_dir
         
         # Create directory if it doesn't exist
         if not os.path.exists(self.default_save_dir):
@@ -356,7 +356,12 @@ class CaptureUI(QMainWindow):
         if dir_path:
             self.default_save_dir = dir_path
             self.path_label.setText(f'Save Path: {self.default_save_dir}')
-            self.statusBar().showMessage(f'Save path has been changed')
+            
+            # 캡처 모듈에 경로 변경 사항 전달 (설정 파일에도 저장됨)
+            self.capture_module.set_save_directory(self.default_save_dir)
+            
+            self.statusBar().showMessage(f'Save path has been changed and saved to settings')
+            print(f"저장 경로가 변경되었습니다: {self.default_save_dir}")
 
     def save_image(self):
         """Save captured image"""

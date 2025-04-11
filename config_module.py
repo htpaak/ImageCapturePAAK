@@ -7,12 +7,32 @@ load_dotenv()
 
 class ConfigManager:
     """설정 관리 클래스"""
-    def __init__(self, config_file="settings.json"):
+    def __init__(self, config_file=None):
         """
         설정 관리자 초기화
-        :param config_file: 설정 파일 경로
+        :param config_file: 설정 파일 경로 (None이면 기본 경로 사용)
         """
-        self.config_file = config_file
+        # 설정 파일 저장 경로 설정 (C:\Snipix 폴더)
+        self.config_dir = os.path.join("C:\\", "Snipix")
+        
+        # 설정 폴더가 없으면 생성
+        if not os.path.exists(self.config_dir):
+            try:
+                os.makedirs(self.config_dir)
+                print(f"설정 폴더 생성됨: {self.config_dir}")
+            except Exception as e:
+                print(f"설정 폴더 생성 실패: {e}")
+                # 생성 실패 시 현재 폴더로 대체
+                self.config_dir = os.path.abspath(".")
+        
+        # 설정 파일 경로 설정
+        if config_file is None:
+            self.config_file = os.path.join(self.config_dir, "settings.json")
+        else:
+            self.config_file = config_file
+            
+        print(f"설정 파일 경로: {self.config_file}")
+            
         self.default_settings = {
             "save_directory": os.path.join(os.path.expanduser("~"), "Pictures", "ScreenCaptures"),
             "image_format": "png",
@@ -38,11 +58,13 @@ class ConfigManager:
                     settings = json.load(f)
                     # 기본 설정과 병합하여 누락된 설정 항목 보완
                     return {**self.default_settings, **settings}
-            except (json.JSONDecodeError, IOError):
+            except (json.JSONDecodeError, IOError) as e:
                 # 파일이 손상된 경우 기본 설정 반환
+                print(f"설정 파일 읽기 실패: {e}")
                 return self.default_settings
         else:
             # 설정 파일이 없으면 기본 설정 저장 후 반환
+            print(f"설정 파일이 없어 새로 생성합니다: {self.config_file}")
             self.save_settings(self.default_settings)
             return self.default_settings
 
@@ -55,11 +77,17 @@ class ConfigManager:
             settings = self.settings
         
         try:
+            # 설정 파일 폴더가 존재하는지 다시 확인 (외부에서 삭제했을 수도 있음)
+            config_dir = os.path.dirname(self.config_file)
+            if not os.path.exists(config_dir):
+                os.makedirs(config_dir)
+                
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(settings, f, indent=4)
-        except IOError:
+            print(f"설정 저장 완료: {self.config_file}")
+        except IOError as e:
             # 파일 저장 실패 시 예외 처리
-            print(f"설정 파일 저장 중 오류 발생: {self.config_file}")
+            print(f"설정 파일 저장 중 오류 발생: {self.config_file} - {e}")
 
     def get_setting(self, key, default=None):
         """
