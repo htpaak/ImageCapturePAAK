@@ -1053,20 +1053,37 @@ class AreaSelector(QWidget):
             self.selection_end = event.pos()
             self.is_selecting = False
             
-            # Calculate selection area
+            # Calculate selection area (logical pixels)
             selection_rect = QRect(self.selection_start, self.selection_end).normalized()
+
+            # Get Device Pixel Ratio for scaling
+            # AreaSelector는 최상위 위젯이므로 application에서 가져오거나 primaryScreen 사용
+            screen = QApplication.primaryScreen()
+            if screen:
+                device_pixel_ratio = screen.devicePixelRatio()
+            else:
+                device_pixel_ratio = 1.0 # Fallback
+
+            # Scale the rectangle coordinates to physical pixels
+            physical_rect = QRect(
+                int(selection_rect.x() * device_pixel_ratio),
+                int(selection_rect.y() * device_pixel_ratio),
+                int(selection_rect.width() * device_pixel_ratio),
+                int(selection_rect.height() * device_pixel_ratio)
+            )
             
             # Close window after selection is complete
             self.close()
             
-            # Pass selection information to parent (창 표시는 캡처 모듈에서 처리됨)
+            # Pass PHYSICAL selection information to parent (창 표시는 캡처 모듈에서 처리됨)
             if self.parent:
                 # 선택 영역이 너무 작으면 메인 창을 직접 표시
-                if selection_rect.width() < 10 or selection_rect.height() < 10:
+                if physical_rect.width() < 10 or physical_rect.height() < 10:
                     self.parent.show()
                     self.parent.statusBar().showMessage('Area selection too small - canceled.')
                 else:
-                    self.parent.process_area_selection(selection_rect)
+                    # process_area_selection에는 이제 물리적 픽셀 좌표를 전달
+                    self.parent.process_area_selection(physical_rect)
 
     def keyPressEvent(self, event):
         """Key event handling"""
