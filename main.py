@@ -49,7 +49,7 @@ def main():
                 app_id = 'com.snipix.screencapture'
                 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
     except Exception as e:
-        print(f"아이콘 설정 중 오류 발생: {e}")
+        print(f"Error occurred during icon setup: {e}")
     
     # UI 표시
     ui.show()

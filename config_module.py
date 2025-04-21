@@ -19,7 +19,7 @@ class ConfigManager:
         # 설정 폴더가 없으면 생성
         if not os.path.exists(self.config_dir):
             os.makedirs(self.config_dir)
-            print(f"설정 폴더 생성됨: {self.config_dir}")
+            print(f"Settings folder created: {self.config_dir}")
         
         # 설정 파일 경로 설정
         if config_file is None:
@@ -27,7 +27,7 @@ class ConfigManager:
         else:
             self.config_file = config_file
             
-        print(f"설정 파일 경로: {self.config_file}")
+        print(f"Settings file path: {self.config_file}")
             
         self.default_settings = {
             "save_directory": os.path.join(os.path.expanduser("~"), "Pictures", "Screenshots"),
@@ -43,7 +43,7 @@ class ConfigManager:
         save_dir = os.path.normpath(self.settings["save_directory"])  # 경로 정규화
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
-            print(f"저장 경로 생성: {save_dir}")
+            print(f"Save path created: {save_dir}")
         # 경로 정규화 후 다시 설정
         self.settings["save_directory"] = save_dir
 
@@ -60,11 +60,11 @@ class ConfigManager:
                     return {**self.default_settings, **settings}
             except (json.JSONDecodeError, IOError) as e:
                 # 파일이 손상된 경우 기본 설정 반환
-                print(f"설정 파일 읽기 실패: {e}")
+                print(f"Failed to read settings file: {e}")
                 return self.default_settings
         else:
             # 설정 파일이 없으면 기본 설정 저장 후 반환
-            print(f"설정 파일이 없어 새로 생성합니다: {self.config_file}")
+            print(f"Settings file not found, creating a new one: {self.config_file}")
             self.save_settings(self.default_settings)
             return self.default_settings
 
@@ -84,10 +84,10 @@ class ConfigManager:
                 
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(settings, f, indent=4)
-            print(f"설정 저장 완료: {self.config_file}")
+            print(f"Settings saved successfully: {self.config_file}")
         except IOError as e:
             # 파일 저장 실패 시 예외 처리
-            print(f"설정 파일 저장 중 오류 발생: {self.config_file} - {e}")
+            print(f"Error occurred while saving settings file: {self.config_file} - {e}")
 
     def get_setting(self, key, default=None):
         """

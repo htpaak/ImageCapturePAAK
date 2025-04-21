@@ -69,19 +69,19 @@ class ScreenCapture:
             
             if result == 0:  # S_OK
                 # DWM API 결과 좌표 출력
-                print(f"DWM API 창 좌표: 좌상단({rect.left}, {rect.top}), 우하단({rect.right}, {rect.bottom})")
+                print(f"DWM API window coordinates: Top-left({rect.left}, {rect.top}), Bottom-right({rect.right}, {rect.bottom})")
                 return rect.left, rect.top, rect.right, rect.bottom
         except Exception as e:
-            print(f"DWM API 호출 오류 (무시함): {e}")
+            print(f"DWM API call error (ignored): {e}")
             
         # 실패하면 일반 GetWindowRect 사용
         try:
             left, top, right, bottom = win32gui.GetWindowRect(hwnd)
             # GetWindowRect 결과 좌표 출력
-            print(f"GetWindowRect 창 좌표: 좌상단({left}, {top}), 우하단({right}, {bottom})")
+            print(f"GetWindowRect window coordinates: Top-left({left}, {top}), Bottom-right({right}, {bottom})")
             return left, top, right, bottom
         except Exception as e:
-            print(f"GetWindowRect 호출 오류: {e}")
+            print(f"GetWindowRect call error: {e}")
             return 0, 0, 800, 600  # 기본값 반환
 
     def capture_full_screen(self, window_to_hide=None):
@@ -125,7 +125,7 @@ class ScreenCapture:
                 temp_file = os.path.join(temp_dir, "temp_preview.png")
                 img.save(temp_file)
                 
-                print(f"전체 화면 캡처 성공! 임시 파일 저장: {temp_file}")
+                print(f"Full screen capture successful! Temp file saved: {temp_file}")
                 return temp_file
         finally:
             # 캡처 후 윈도우 상태 복원 (예외 발생해도 실행)
@@ -178,7 +178,7 @@ class ScreenCapture:
                 temp_file = os.path.join(temp_dir, "temp_preview.png")
                 img.save(temp_file)
                 
-                print(f"영역 캡처 성공! 임시 파일 저장: {temp_file}")
+                print(f"Area capture successful! Temp file saved: {temp_file}")
                 return temp_file
         finally:
             # 캡처 후 윈도우 상태 복원 (예외 발생해도 실행)
@@ -210,11 +210,11 @@ class ScreenCapture:
             if hwnd and hwnd != 0 and win32gui.IsWindow(hwnd):
                 # 창 정보 가져오기
                 title = win32gui.GetWindowText(hwnd)
-                print(f"캡처 대상 창: '{title}' (핸들: {hwnd})")
+                print(f"Capture target window: '{title}' (Handle: {hwnd})")
                 
                 # 창이 최소화되어 있는지 확인하고 복원
                 if win32gui.IsIconic(hwnd):
-                    print("창이 최소화되어 있어 복원합니다.")
+                    print("Window is minimized, restoring.")
                     win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
                     time.sleep(0.2)  # 창이 복원될 때까지 대기
                 
@@ -225,7 +225,7 @@ class ScreenCapture:
                     # 약간의 지연을 추가하여 창이 활성화될 시간 확보
                     time.sleep(0.3)
                 except Exception as e:
-                    print(f"창 활성화 실패 (무시): {e}")
+                    print(f"Window activation failed (ignored): {e}")
                 
                 # 창 크기 가져오기 - 활성화 후 다시 확인 (더 정확한 좌표 획득)
                 left, top, right, bottom = self.get_window_rect(hwnd)
@@ -245,25 +245,25 @@ class ScreenCapture:
                 width = right - left
                 height = bottom - top
                 
-                print(f"조정된 캡처 영역: 좌상단({left}, {top}), 우하단({right}, {bottom}), 크기({width} x {height})")
+                print(f"Adjusted capture area: Top-left({left}, {top}), Bottom-right({right}, {bottom}), Size({width} x {height})")
                 
                 # 크기 유효성 검사
                 if width <= 10 or height <= 10:
-                    print(f"창 크기가 너무 작습니다: {width}x{height}")
+                    print(f"Window size is too small: {width}x{height}")
                     return self.capture_full_screen(window_to_hide)
                 
                 # 창 크기가 너무 크면 제한 (메모리 문제 방지)
                 MAX_WIDTH = 8000
                 MAX_HEIGHT = 8000
                 if width > MAX_WIDTH or height > MAX_HEIGHT:
-                    print(f"창 크기가 너무 큽니다. 전체 화면 캡처로 대체합니다.")
+                    print(f"Window size is too large. Capturing full screen instead.")
                     return self.capture_full_screen(window_to_hide)
                 
                 # 직접 화면 영역 캡처 - 가장 정확한 방법으로 변경
                 with mss.mss() as sct:
                     # 캡처 영역 정의 - 정확한 좌표 사용
                     capture_area = {"top": top, "left": left, "width": width, "height": height}
-                    print(f"캡처 영역: 좌상단({left}, {top}), 크기({width} x {height})")
+                    print(f"Capture area: Top-left({left}, {top}), Size({width} x {height})")
                     
                     # 캡처 실행
                     screenshot = sct.grab(capture_area)
@@ -276,7 +276,7 @@ class ScreenCapture:
                         # 이미지에서 단색 테두리를 감지하고 제거
                         img = self._clean_image_borders(img)
                     except Exception as e:
-                        print(f"이미지 테두리 정리 중 오류: {e}")
+                        print(f"Error cleaning image borders: {e}")
                     
                     self.captured_image = img
                     
@@ -288,10 +288,10 @@ class ScreenCapture:
                     temp_file = os.path.join(temp_dir, "temp_preview.png")
                     img.save(temp_file)
                     
-                    print("화면 영역 캡처 완료")
+                    print("Screen area capture complete")
                     return temp_file
             else:
-                print("유효한 창 핸들이 없어 전체 화면을 캡처합니다.")
+                print("Invalid window handle, capturing full screen.")
                 return self.capture_full_screen(window_to_hide)
                 
         finally:
@@ -323,10 +323,10 @@ class ScreenCapture:
             # 이미지를 그대로 복사
             new_img = img.copy()
             
-            print(f"이미지 테두리 정리 완료: {width}x{height} -> {new_width}x{new_height}")
+            print(f"Image border cleaning complete: {width}x{height} -> {new_width}x{new_height}")
             return new_img
         except Exception as e:
-            print(f"이미지 테두리 정리 오류: {e}")
+            print(f"Image border cleaning error: {e}")
             return img  # 오류 발생 시 원본 이미지 반환
 
     def get_window_list(self):
@@ -380,7 +380,7 @@ class ScreenCapture:
         directory = os.path.dirname(filepath)
         if not os.path.exists(directory):
             os.makedirs(directory)
-            print(f"저장 디렉토리 생성: {directory}")
+            print(f"Save directory created: {directory}")
         
         # 이미지 저장
         self.captured_image.save(filepath)
@@ -411,6 +411,6 @@ class ScreenCapture:
             if self.config_manager:
                 self.config_manager.update_setting("save_directory", normalized_dir)
                 
-            print(f"저장 경로 설정 완료: {self.save_dir}")
+            print(f"Save path set successfully: {self.save_dir}")
         else:
-            print(f"저장 경로가 이미 설정되어 있습니다: {self.save_dir}") 
+            print(f"Save path is already set: {self.save_dir}") 

@@ -384,10 +384,10 @@ class CaptureUI(QMainWindow):
             win32api.keybd_event(win32con.VK_MENU, 0, 0, 0)  # ALT 키 누름
             win32api.keybd_event(win32con.VK_MENU, 0, win32con.KEYEVENTF_KEYUP, 0)  # ALT 키 해제
             
-            print("강제 창 활성화 완료")
+            print("Forced window activation complete")
             
         except Exception as e:
-            print(f"창 활성화 중 오류: {e}")
+            print(f"Error during window activation: {e}")
 
     def capture_full_screen(self):
         """Perform full screen capture"""
@@ -449,7 +449,7 @@ class CaptureUI(QMainWindow):
         """선택한 창 캡처 처리"""
         # 취소한 경우
         if hwnd is None:
-            self.statusBar().showMessage('캡처가 취소되었습니다')
+            self.statusBar().showMessage('Capture canceled')
             self.show()
             self.activateWindow()
             self.raise_()
@@ -461,8 +461,8 @@ class CaptureUI(QMainWindow):
         try:
             # 창이 유효한지 다시 확인
             if not win32gui.IsWindow(hwnd):
-                print("유효하지 않은 창 핸들입니다.")
-                self.statusBar().showMessage('유효하지 않은 창입니다. 다시 시도해주세요.')
+                print("Invalid window handle.")
+                self.statusBar().showMessage('Invalid window. Please try again.')
                 self.show()
                 self.activateWindow()
                 self.raise_()
@@ -472,7 +472,7 @@ class CaptureUI(QMainWindow):
                 
             # 창 정보 확인
             window_title = win32gui.GetWindowText(hwnd)
-            print(f"캡처할 창: {window_title} (핸들: {hwnd})")
+            # print(f"Window to capture: {window_title} (Handle: {hwnd})") # 이미 capture_module에서 출력하므로 중복 제거
             
             # 선택한 창 캡처 (hwnd를 전달하여 해당 창만 캡처)
             self.last_capture_path = self.capture_module.capture_window(window_to_hide=self, hwnd=hwnd)
@@ -489,20 +489,20 @@ class CaptureUI(QMainWindow):
             self.update_preview(self.last_capture_path)
             
             # 캡처된 창 이름 표시
-            window_name = window_title if window_title else "선택한 창"
-            self.statusBar().showMessage(f'"{window_name}" 창 캡처가 완료되었습니다 - 저장 버튼을 눌러 이미지를 저장하세요')
+            window_name = window_title if window_title else "Selected window"
+            self.statusBar().showMessage(f'Capture of window "{window_name}" completed - Press Save button to save the image')
             self.save_btn.setEnabled(True)
             
         except Exception as e:
-            print(f"창 캡처 처리 중 오류 발생: {e}")
+            print(f"Error processing window capture: {e}")
             if not self.isVisible():
                 self.show()
                 self.activateWindow()
                 self.raise_()
                 # 강제 활성화 추가
                 QTimer.singleShot(100, self._force_window_to_foreground)
-            self.statusBar().showMessage(f'캡처 실패: {str(e)}')
-            QMessageBox.warning(self, "캡처 오류", f"화면 캡처 중 오류가 발생했습니다: {str(e)}")
+            self.statusBar().showMessage(f'Capture failed: {str(e)}')
+            QMessageBox.warning(self, "Capture Error", f"An error occurred during screen capture: {str(e)}")
 
     def process_area_selection(self, rect):
         """Process area selection"""
@@ -580,12 +580,12 @@ class CaptureUI(QMainWindow):
             self.capture_module.set_save_directory(self.default_save_dir)
             
             self.statusBar().showMessage(f'Save path has been changed and saved to settings')
-            print(f"저장 경로가 변경되었습니다: {self.default_save_dir}")
+            print(f"Save path has been changed: {self.default_save_dir}")
 
     def save_image(self):
         """Save captured image"""
         if not hasattr(self.capture_module, 'captured_image') or self.capture_module.captured_image is None:
-            QMessageBox.warning(self, "저장 오류", "저장할 캡처 이미지가 없습니다.")
+            QMessageBox.warning(self, "Save Error", "There is no captured image to save.")
             return
         
         # Auto-generate filename (based on current date and time)
@@ -601,13 +601,13 @@ class CaptureUI(QMainWindow):
             if saved_path:
                 self.last_saved_file_path = saved_path # 저장된 경로 저장
                 # 상태 표시줄에 저장 완료 메시지 표시 (3초 후 자동 사라짐)
-                self.statusBar().showMessage(f'이미지가 저장되었습니다: {saved_path}', 3000)
+                self.statusBar().showMessage(f'Image saved: {saved_path}', 3000)
                 
                 # 저장 버튼 비활성화하지 않고 계속 활성화 상태 유지
             else:
-                QMessageBox.warning(self, "저장 오류", "이미지 저장에 실패했습니다.")
+                QMessageBox.warning(self, "Save Error", "Failed to save image.")
         except Exception as e:
-            QMessageBox.critical(self, "저장 오류", f"파일 저장 중 오류가 발생했습니다: {str(e)}")
+            QMessageBox.critical(self, "Save Error", f"An error occurred while saving the file: {str(e)}")
 
     def resizeEvent(self, event):
         """Update preview when window size changes"""
@@ -646,22 +646,22 @@ class CaptureUI(QMainWindow):
                 if self.last_saved_file_path and os.path.exists(self.last_saved_file_path):
                     # 마지막 저장된 파일이 있으면 해당 파일을 선택하여 폴더 열기
                     subprocess.run(['explorer', '/select,', self.last_saved_file_path])
-                    self.statusBar().showMessage(f'폴더를 열고 파일을 선택했습니다: {self.last_saved_file_path}', 3000)
+                    self.statusBar().showMessage(f'Opened folder and selected file: {self.last_saved_file_path}', 3000)
                 else:
                     # 저장된 파일이 없으면 폴더만 열기
                     os.startfile(self.default_save_dir)
-                    self.statusBar().showMessage(f'폴더를 열었습니다: {self.default_save_dir}', 3000)
+                    self.statusBar().showMessage(f'Opened folder: {self.default_save_dir}', 3000)
             elif platform.system() == "Darwin":
                 # macOS (파일 선택 기능 미지원, 폴더만 열기)
                 subprocess.call(["open", self.default_save_dir])
-                self.statusBar().showMessage(f'폴더를 열었습니다: {self.default_save_dir}', 3000)
+                self.statusBar().showMessage(f'Opened folder: {self.default_save_dir}', 3000)
             else:
                 # Linux (파일 선택 기능 미지원, 폴더만 열기)
                 subprocess.call(["xdg-open", self.default_save_dir])
-                self.statusBar().showMessage(f'폴더를 열었습니다: {self.default_save_dir}', 3000)
+                self.statusBar().showMessage(f'Opened folder: {self.default_save_dir}', 3000)
                 
         except Exception as e:
-            QMessageBox.warning(self, "오류", f"폴더를 열 수 없습니다: {str(e)}")
+            QMessageBox.warning(self, "Error", f"Could not open folder: {str(e)}")
 
 
 class WindowSelector(QWidget):
@@ -718,12 +718,12 @@ class WindowSelector(QWidget):
             
             # 창 목록이 있는지 확인
             if self.window_list:
-                print(f"감지된 창 목록: {len(self.window_list)}개")
+                print(f"Detected window list: {len(self.window_list)} items")
             else:
-                print("감지된 창이 없습니다.")
+                print("No windows detected.")
                 
         except Exception as e:
-            print(f"창 목록 로드 오류: {e}")
+            print(f"Error loading window list: {e}")
             
     def initUI(self):
         """UI 초기화"""
@@ -734,7 +734,7 @@ class WindowSelector(QWidget):
         self.setCursor(Qt.CrossCursor)
         
         # 안내 텍스트 표시
-        self.info_label = QLabel("마우스를 창 위에 올리면 해당 창이 강조되고, 클릭하면 창 전체가 캡처됩니다. ESC 키를 누르면 취소됩니다.", self)
+        self.info_label = QLabel("Hover the mouse over a window to highlight it, click to capture the entire window. Press ESC to cancel.", self)
         self.info_label.setStyleSheet("""
             background-color: rgba(0, 0, 0, 180); 
             color: white; 
@@ -795,14 +795,14 @@ class WindowSelector(QWidget):
                 self.current_hwnd = window['hwnd']
                 self.current_title = window['title']
                 self.current_rect = window['rect']
-                print(f"✓ 창 인식: '{window['title']}', 크기: {window['rect'].width()}x{window['rect'].height()}")
+                print(f"✓ Window recognized: '{window['title']}', Size: {window['rect'].width()}x{window['rect'].height()}")
                 self.update()
             else:
                 # 창을 찾지 못했으면 초기화
                 self.clear_current_window()
                 
         except Exception as e:
-            print(f"창 감지 오류: {e}")
+            print(f"Window detection error: {e}")
             self.clear_current_window()
 
     def clear_current_window(self):

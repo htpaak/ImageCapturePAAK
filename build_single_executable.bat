@@ -15,6 +15,7 @@ pyinstaller --name=Snipix ^
   --windowed ^
   --onefile ^
   --clean ^
+  --noupx ^
   --add-data "assets;assets" ^
   --exclude-module=pytest ^
   --exclude-module=_pytest ^
