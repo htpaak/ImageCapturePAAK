@@ -38,9 +38,6 @@ class CaptureUI(QMainWindow):
         
         # 단축키 설정
         self.setup_shortcuts()
-        
-        # Center the window on screen
-        self.center_on_screen()
 
     def center_on_screen(self):
         """Center the window on the screen"""
@@ -54,8 +51,8 @@ class CaptureUI(QMainWindow):
         """Initialize UI"""
         # Basic window settings
         self.setWindowTitle('Snipix')
-        # 창 크기 설정: 가로 크기를 1000px로 설정
-        self.setGeometry(100, 100, 1000, 750)
+        # 창 크기 설정
+        self.setGeometry(100, 100, 400, 435) # 너비 수정: 500 -> 400
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #f5f5f5;
@@ -79,7 +76,7 @@ class CaptureUI(QMainWindow):
             }
             QStatusBar {
                 background-color: #e0e0e0;
-                font-size: 15px;
+                font-size: 8px;
             }
         """)
 
@@ -99,13 +96,13 @@ class CaptureUI(QMainWindow):
         icon_label = QLabel()
         icon_path = get_resource_path(os.path.join('assets', 'icon.ico'))
         if os.path.exists(icon_path):
-            pixmap = QPixmap(icon_path).scaled(48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            pixmap = QPixmap(icon_path).scaled(47, 47, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             icon_label.setPixmap(pixmap)
         icon_label.setAlignment(Qt.AlignVCenter)  # 수직 가운데 정렬
         
         # Program title
         title_label = QLabel('Snipix')
-        title_label.setStyleSheet("font-size: 28px; font-weight: bold; color: #333333;")
+        title_label.setStyleSheet("font-size: 27px; font-weight: bold; color: #333333;")
         title_label.setAlignment(Qt.AlignVCenter)  # 수직 가운데 정렬
         
         # 컨테이너 위젯을 생성하여 아이콘과 텍스트를 담음
@@ -122,7 +119,7 @@ class CaptureUI(QMainWindow):
 
         # Guide message
         guide_label = QLabel('Select the capture method you want')
-        guide_label.setStyleSheet("font-size: 16px; color: #555555; margin-bottom: 5px;")
+        guide_label.setStyleSheet("font-size: 15px; color: #555555; margin-bottom: 5px;")
         guide_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(guide_label)
 
@@ -131,29 +128,32 @@ class CaptureUI(QMainWindow):
         btn_layout.setSpacing(15)
 
         # Full screen capture button
-        self.capture_btn = QPushButton('Full Screen Capture')
-        self.capture_btn.setMinimumHeight(90)  # 60 * 1.5 = 90
-        self.capture_btn.setFixedWidth(300)  # 버튼 가로 크기 제한
+        self.capture_btn = QPushButton('Screen Capture (F10)')
+        self.capture_btn.setMinimumHeight(45)  # 최소 높이 수정: 90 -> 45
+        self.capture_btn.setFixedWidth(156)  # 너비 수정: 195 -> 156 (0.8배)
         self.capture_btn.setToolTip('Capture the entire screen')
         self.capture_btn.setIcon(QIcon.fromTheme('camera-photo'))
+        self.capture_btn.setStyleSheet("font-size: 8pt;") # 폰트 크기 수정: 7pt -> 8pt
         self.capture_btn.clicked.connect(self.capture_full_screen)
         btn_layout.addWidget(self.capture_btn)
 
         # Area capture button
-        self.area_btn = QPushButton('Rectangular Area Capture')
-        self.area_btn.setMinimumHeight(90)  # 60 * 1.5 = 90
-        self.area_btn.setFixedWidth(300)  # 버튼 가로 크기 제한
+        self.area_btn = QPushButton('Area Capture (F9)')
+        self.area_btn.setMinimumHeight(45)  # 최소 높이 수정: 90 -> 45
+        self.area_btn.setFixedWidth(156)  # 너비 수정: 195 -> 156 (0.8배)
         self.area_btn.setToolTip('Drag to select an area to capture')
         self.area_btn.setIcon(QIcon.fromTheme('select-rectangular'))
+        self.area_btn.setStyleSheet("font-size: 8pt;") # 폰트 크기 수정: 7pt -> 8pt
         self.area_btn.clicked.connect(self.capture_area)
         btn_layout.addWidget(self.area_btn)
         
         # Window capture button
-        self.window_btn = QPushButton('Window Capture')
-        self.window_btn.setMinimumHeight(90)  # 60 * 1.5 = 90
-        self.window_btn.setFixedWidth(300)  # 버튼 가로 크기 제한
+        self.window_btn = QPushButton('Window Capture (F8)')
+        self.window_btn.setMinimumHeight(45)  # 최소 높이 수정: 90 -> 45
+        self.window_btn.setFixedWidth(156)  # 너비 수정: 195 -> 156 (0.8배)
         self.window_btn.setToolTip('Capture the active window')
         self.window_btn.setIcon(QIcon.fromTheme('window'))
+        self.window_btn.setStyleSheet("font-size: 8pt;") # 폰트 크기 수정: 7pt -> 8pt
         self.window_btn.clicked.connect(self.capture_window)
         btn_layout.addWidget(self.window_btn)
 
@@ -169,7 +169,7 @@ class CaptureUI(QMainWindow):
 
         # Preview title
         preview_title = QLabel('Captured Image Preview')
-        preview_title.setStyleSheet("font-size: 18px; font-weight: bold; color: #333333;")
+        preview_title.setStyleSheet("font-size: 14px; color: #333333;")
         preview_title.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(preview_title)
 
@@ -180,19 +180,19 @@ class CaptureUI(QMainWindow):
         preview_frame.setStyleSheet("background-color: white; border: 1px solid #cccccc; border-radius: 4px;")
         
         # 프레임 크기 정책 설정 - 고정 비율로 설정
-        preview_frame.setMinimumWidth(640)  # 최소 너비 설정
-        preview_frame.setMinimumHeight(360)  # 16:9 비율에 맞게 설정
+        preview_frame.setMinimumWidth(320)  # 최소 너비 수정: 640 -> 320
+        preview_frame.setMinimumHeight(282)  # 최소 높이 수정: 240 -> 288 (1.2배)
         
         # 프레임 크기 정책 설정 - Preferred로 설정해서 레이아웃 내에서는 크기 유지
         sizePolicy = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        sizePolicy.setHeightForWidth(True)  # 너비에 따라 높이 비율 유지
+        # sizePolicy.setHeightForWidth(True)  # 너비에 따라 높이 비율 유지 -> 주석 처리
         preview_frame.setSizePolicy(sizePolicy)
         
-        # heightForWidth 메서드 재정의하여 16:9 비율 유지
-        def height_for_width(width):
-            return int(width * 9 / 16)  # 16:9 비율
+        # heightForWidth 메서드 재정의하여 16:9 비율 유지 -> 관련 코드 주석 처리
+        # def height_for_width(width):
+        #     return int(width * 9 / 16)  # 16:9 비율
             
-        preview_frame.heightForWidth = height_for_width
+        # preview_frame.heightForWidth = height_for_width
         
         # 프레임 레이아웃 설정 - 여백 제거
         preview_layout = QVBoxLayout(preview_frame)
@@ -202,8 +202,8 @@ class CaptureUI(QMainWindow):
         # Preview label
         self.preview_label = QLabel('The preview will be displayed here after capture')
         self.preview_label.setAlignment(Qt.AlignCenter)
-        self.preview_label.setStyleSheet("color: #888888; font-size: 16px;")
-        self.preview_label.setMinimumHeight(360)  # 16:9 비율에 맞게 설정
+        self.preview_label.setStyleSheet("color: #888888; font-size: 15px;") # 폰트 크기 수정: 10px -> 15px (1.5배)
+        self.preview_label.setMinimumHeight(282)  # 최소 높이 수정: 240 -> 288 (1.2배)
         
         # 레이블 크기 정책 설정 - 컨테이너를 채우도록 설정
         self.preview_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -229,14 +229,14 @@ class CaptureUI(QMainWindow):
         
         # 경로 레이블 - 고정 너비 설정
         path_label_prefix = QLabel('Save Path:')
-        path_label_prefix.setStyleSheet("font-size: 18px; color: #555555; padding: 8px 0;")
-        path_label_prefix.setFixedWidth(100)
+        path_label_prefix.setStyleSheet("font-size: 14px; color: #555555; padding: 8px 0;")
+        path_label_prefix.setFixedWidth(80) # 너비 수정: 50 -> 80 (텍스트 표시 공간 확보)
         path_info_layout.addWidget(path_label_prefix)
         
         # 경로 내용 (스크롤 가능한 영역)
         self.path_content = QLabel(self.default_save_dir)
-        self.path_content.setStyleSheet("font-size: 18px; color: #555555; padding: 8px 0; background-color: #f9f9f9; border-radius: 4px;")
-        self.path_content.setMinimumWidth(200)
+        self.path_content.setStyleSheet("font-size: 14px; color: #555555; padding: 8px 0; background-color: #f9f9f9; border-radius: 4px;")
+        self.path_content.setMinimumWidth(100) # 최소 너비 수정: 200 -> 100
         self.path_content.setTextInteractionFlags(Qt.TextSelectableByMouse)
         path_info_layout.addWidget(self.path_content, 1)  # 1은 stretch factor로, 공간이 있으면 확장됨
         
@@ -252,13 +252,13 @@ class CaptureUI(QMainWindow):
         
         # Change Path 버튼
         self.path_btn = QPushButton('Change Path')
-        self.path_btn.setMinimumHeight(68)
-        self.path_btn.setFixedWidth(150)
+        self.path_btn.setMinimumHeight(34) # 최소 높이 수정: 68 -> 34
+        self.path_btn.setFixedWidth(98) # 너비 수정: 75 -> 98 (1.3배)
         self.path_btn.setToolTip('Change the save location for captured images')
         self.path_btn.setStyleSheet("""
             QPushButton {
                 background-color: rgba(241, 196, 15, 0.8);
-                font-size: 16px;
+                font-size: 8pt; /* 폰트 크기 수정: 7pt -> 8pt */
                 color: white;
                 padding: 8px;
             }
@@ -274,13 +274,13 @@ class CaptureUI(QMainWindow):
         
         # 윈도우 탐색기로 저장 디렉토리 열기 버튼
         self.open_folder_btn = QPushButton('Open Folder')
-        self.open_folder_btn.setMinimumHeight(68)
-        self.open_folder_btn.setFixedWidth(150)
-        self.open_folder_btn.setToolTip('Open the save folder in file explorer')
+        self.open_folder_btn.setMinimumHeight(34) # 최소 높이 수정: 68 -> 34
+        self.open_folder_btn.setFixedWidth(98) # 너비 수정: 75 -> 98 (1.3배)
+        self.open_folder_btn.setToolTip('Open the folder where the image was saved')
         self.open_folder_btn.setStyleSheet("""
             QPushButton {
                 background-color: rgba(41, 128, 185, 0.8);
-                font-size: 16px;
+                font-size: 8pt; /* 폰트 크기 수정: 7pt -> 8pt */
                 color: white;
                 padding: 8px;
             }
@@ -296,13 +296,13 @@ class CaptureUI(QMainWindow):
         
         # Save 버튼
         self.save_btn = QPushButton('Save')
-        self.save_btn.setMinimumHeight(68)
-        self.save_btn.setFixedWidth(150)
+        self.save_btn.setMinimumHeight(34) # 최소 높이 수정: 68 -> 34
+        self.save_btn.setFixedWidth(98) # 너비 수정: 75 -> 98 (1.3배)
         self.save_btn.setToolTip('Save the captured image')
         self.save_btn.setStyleSheet("""
             QPushButton {
                 background-color: rgba(231, 76, 60, 0.8);
-                font-size: 18px;
+                font-size: 8pt; /* 폰트 크기 수정: 7pt -> 8pt */
                 color: white;
                 padding: 8px;
             }
@@ -325,7 +325,7 @@ class CaptureUI(QMainWindow):
 
         # Status bar setup
         status_bar = QStatusBar()
-        status_bar.setStyleSheet("padding: 10px; font-size: 22px; min-height: 40px;")
+        status_bar.setStyleSheet("padding: 5px; font-size: 10px; min-height: 18px;")
         self.setStatusBar(status_bar)
         self.statusBar().showMessage('Ready')
 
@@ -337,12 +337,12 @@ class CaptureUI(QMainWindow):
         # 전체 캡처 단축키 (F10)
         self.shortcut_full = QShortcut(QKeySequence('F10'), self)
         self.shortcut_full.activated.connect(self.capture_full_screen)
-        self.capture_btn.setText('Full Screen Capture (F10)')
+        self.capture_btn.setText('Screen Capture (F10)')
         
         # 영역 캡처 단축키 (F9)
         self.shortcut_area = QShortcut(QKeySequence('F9'), self)
         self.shortcut_area.activated.connect(self.capture_area)
-        self.area_btn.setText('Rectangular Area Capture (F9)')
+        self.area_btn.setText('Area Capture (F9)')
         
         # 창 캡처 단축키 (F8)
         self.shortcut_window = QShortcut(QKeySequence('F8'), self)
@@ -536,7 +536,7 @@ class CaptureUI(QMainWindow):
             
             if pixmap.isNull():
                 self.preview_label.setText('Cannot load image')
-                self.preview_label.setStyleSheet("color: #888888; font-size: 16px;")
+                self.preview_label.setStyleSheet("color: #888888; font-size: 8px;")
                 return
             
             # 레이블 최대 크기 가져오기
@@ -561,7 +561,7 @@ class CaptureUI(QMainWindow):
         else:
             # 이미지를 찾을 수 없는 경우
             self.preview_label.setText('Cannot load image')
-            self.preview_label.setStyleSheet("color: #888888; font-size: 16px; background-color: white;")
+            self.preview_label.setStyleSheet("color: #888888; font-size: 8px; background-color: white;")
 
     def set_save_path(self):
         """Set save path"""
@@ -730,11 +730,11 @@ class WindowSelector(QWidget):
             color: white; 
             padding: 12px; 
             border-radius: 6px;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: bold;
         """)
         self.info_label.setAlignment(Qt.AlignCenter)
-        self.info_label.setFixedWidth(600)  # 텍스트가 잘리지 않도록 너비 확장
+        self.info_label.setFixedWidth(300)  # 너비 수정: 600 -> 300
         
         # 화면 하단에 표시
         rect = self.geometry()
@@ -826,7 +826,7 @@ class WindowSelector(QWidget):
             # 창 제목 텍스트
             painter.setPen(QColor(255, 255, 255))
             font = painter.font()
-            font.setPointSize(11)  # 더 큰 폰트
+            font.setPointSize(12)  # 폰트 크기 수정: 8 -> 12 (1.5배)
             font.setBold(True)
             painter.setFont(font)
             
@@ -883,7 +883,8 @@ class WindowSelector(QWidget):
             # 크기 정보 텍스트
             painter.setPen(QColor(255, 255, 255))
             font = painter.font()
-            font.setPointSize(9)
+            font.setPointSize(11) # 폰트 크기 수정: 7 -> 11 (1.5배)
+            font.setBold(True)
             painter.setFont(font)
             painter.drawText(size_bg_rect, Qt.AlignCenter, size_text)
     
@@ -995,7 +996,7 @@ class AreaSelector(QWidget):
             # Size text drawing
             painter.setPen(QColor(255, 255, 255))
             font = painter.font()
-            font.setPointSize(12)
+            font.setPointSize(12) # 폰트 크기 수정: 8 -> 12 (1.5배)
             font.setBold(True)
             painter.setFont(font)
             painter.drawText(size_bg_rect, Qt.AlignCenter, size_text)

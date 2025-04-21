@@ -2,6 +2,7 @@ import sys
 import os
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import Qt
 import ctypes
 
 # 유틸리티 함수 가져오기
@@ -13,6 +14,11 @@ from gui_module import CaptureUI
 from config_module import ConfigManager
 
 def main():
+    # High DPI 스케일링 활성화
+    # QApplication 인스턴스 생성 전에 설정해야 합니다.
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
+    
     # 애플리케이션 초기화
     app = QApplication(sys.argv)
     app.setApplicationName('Snipix')
@@ -47,6 +53,7 @@ def main():
     
     # UI 표시
     ui.show()
+    ui.center_on_screen()
     
     # 애플리케이션 실행
     sys.exit(app.exec_())
