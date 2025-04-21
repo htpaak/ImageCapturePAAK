@@ -763,11 +763,27 @@ class WindowSelector(QWidget):
     def check_mouse_position(self):
         """마우스 위치에 있는 창 확인"""
         try:
-            # 마우스 현재 위치 가져오기
-            cursor_pos = QCursor.pos()
+            # 마우스 현재 위치 가져오기 (논리적 좌표)
+            logical_cursor_pos = QCursor.pos()
             
-            # 마우스 위치에 있는 창 찾기
-            window = self.find_window_at_position(cursor_pos)
+            # 현재 화면의 devicePixelRatio 가져오기
+            screen = QApplication.screenAt(logical_cursor_pos) # 마우스 커서가 있는 화면
+            if not screen:
+                screen = QApplication.primaryScreen() # 실패 시 주 화면 사용
+            
+            if screen:
+                device_pixel_ratio = screen.devicePixelRatio()
+            else:
+                device_pixel_ratio = 1.0 # Fallback
+                
+            # 논리적 좌표를 물리적 픽셀 좌표로 변환
+            physical_cursor_pos = QPoint(
+                int(logical_cursor_pos.x() * device_pixel_ratio),
+                int(logical_cursor_pos.y() * device_pixel_ratio)
+            )
+            
+            # 물리적 좌표로 마우스 위치에 있는 창 찾기
+            window = self.find_window_at_position(physical_cursor_pos)
             
             # 창을 찾았으면 정보 업데이트
             if window:
@@ -802,41 +818,61 @@ class WindowSelector(QWidget):
         painter = QPainter(self)
         
         # 전체 화면에 반투명한 오버레이 그리기
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 80))  # 더 어둡게 만들어서 선택된 창을 강조
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 80))
         
         # 현재 창 강조 표시
         if self.current_rect and self.current_hwnd and self.current_title:
-            # 선택된 창 영역은 더 투명하게
-            highlight_area = QPainterPath()
-            highlight_area.addRect(QRectF(self.current_rect))
+            # 현재 화면의 devicePixelRatio 가져오기
+            screen = self.screen() # 위젯이 속한 화면 가져오기
+            if not screen:
+                screen = QApplication.primaryScreen() # 실패 시 주 화면 사용
             
-            # 선택된 창 영역만 투명하게 하기 위한 Path 설정
+            if screen:
+                device_pixel_ratio = screen.devicePixelRatio()
+            else:
+                device_pixel_ratio = 1.0 # Fallback
+                
+            # 물리적 좌표(self.current_rect)를 논리적 좌표로 변환
+            logical_rect = QRectF(
+                self.current_rect.x() / device_pixel_ratio,
+                self.current_rect.y() / device_pixel_ratio,
+                self.current_rect.width() / device_pixel_ratio,
+                self.current_rect.height() / device_pixel_ratio
+            )
+
+            # 선택된 창 영역은 더 투명하게 (논리적 좌표 사용)
+            highlight_area = QPainterPath()
+            highlight_area.addRect(logical_rect)
+            
+            # 선택된 창 영역만 투명하게 하기 위한 Path 설정 (논리적 좌표 사용)
             painter.setPen(Qt.NoPen)
             painter.setBrush(QColor(0, 0, 0, 10))  # 매우 투명한 배경
-            painter.drawRect(self.current_rect)
+            painter.drawRect(logical_rect)
             
-            # 테두리 그리기 (굵고 눈에 띄는 색상)
-            pen = QPen(QColor(0, 180, 255), 4)  # 더 두꺼운 테두리
+            # 테두리 그리기 (논리적 좌표 사용)
+            pen = QPen(QColor(0, 180, 255), 4 / device_pixel_ratio) # DPI에 따라 굵기 조정
             painter.setPen(pen)
-            painter.drawRect(self.current_rect)
+            painter.drawRect(logical_rect)
             
-            # 창 제목 표시 영역 (상단에 표시)
-            title_bg_rect = QRect(
-                self.current_rect.x(),
-                max(0, self.current_rect.y() - 50),  # 창 위에 표시
-                min(500, self.current_rect.width()),  # 창 너비를 넘지 않도록
-                40  # 더 큰 높이
+            # 창 제목 표시 영역 (논리적 좌표 기준)
+            title_bg_rect = QRectF(
+                logical_rect.x(),
+                max(0, logical_rect.y() - (50 / device_pixel_ratio)), # 논리적 픽셀로 조정
+                min(500 / device_pixel_ratio, logical_rect.width()), # 논리적 픽셀로 조정
+                40 / device_pixel_ratio  # 논리적 픽셀로 조정
             )
             
             # 창 제목 배경 (어두운 배경)
             painter.setBrush(QColor(0, 0, 0, 180))
             painter.setPen(Qt.NoPen)
-            painter.drawRoundedRect(title_bg_rect, 5, 5)  # 둥근 모서리
+            painter.drawRoundedRect(title_bg_rect, 5 / device_pixel_ratio, 5 / device_pixel_ratio) # DPI에 따라 조정
             
             # 창 제목 텍스트
             painter.setPen(QColor(255, 255, 255))
             font = painter.font()
-            font.setPointSize(12)  # 폰트 크기 수정: 8 -> 12 (1.5배)
+            # 폰트 크기는 논리적 픽셀 기준이므로 그대로 사용해도 될 수 있음
+            # 필요시 font.setPointSizeF(12) 와 같이 조정
+            font.setPointSize(12) 
             font.setBold(True)
             painter.setFont(font)
             
@@ -847,57 +883,60 @@ class WindowSelector(QWidget):
                 
             painter.drawText(title_bg_rect, Qt.AlignCenter, display_title)
             
-            # 모서리 표시점 추가 (더 크고 눈에 띄게)
-            corner_size = 10
+            # 모서리 표시점 추가 (논리적 좌표 기준)
+            corner_size_logical = 10 / device_pixel_ratio # 논리적 크기
             corner_color = QColor(0, 180, 255)
             painter.setBrush(QBrush(corner_color))
             painter.setPen(Qt.NoPen)
             
             # 왼쪽 상단
-            painter.drawRect(QRect(
-                self.current_rect.left() - corner_size//2, 
-                self.current_rect.top() - corner_size//2, 
-                corner_size, corner_size))
+            painter.drawRect(QRectF(
+                logical_rect.left() - corner_size_logical / 2, 
+                logical_rect.top() - corner_size_logical / 2, 
+                corner_size_logical, corner_size_logical))
             
             # 오른쪽 상단
-            painter.drawRect(QRect(
-                self.current_rect.right() - corner_size//2, 
-                self.current_rect.top() - corner_size//2, 
-                corner_size, corner_size))
+            painter.drawRect(QRectF(
+                logical_rect.right() - corner_size_logical / 2, 
+                logical_rect.top() - corner_size_logical / 2, 
+                corner_size_logical, corner_size_logical))
             
             # 왼쪽 하단
-            painter.drawRect(QRect(
-                self.current_rect.left() - corner_size//2, 
-                self.current_rect.bottom() - corner_size//2, 
-                corner_size, corner_size))
+            painter.drawRect(QRectF(
+                logical_rect.left() - corner_size_logical / 2, 
+                logical_rect.bottom() - corner_size_logical / 2, 
+                corner_size_logical, corner_size_logical))
             
             # 오른쪽 하단
-            painter.drawRect(QRect(
-                self.current_rect.right() - corner_size//2, 
-                self.current_rect.bottom() - corner_size//2, 
-                corner_size, corner_size))
+            painter.drawRect(QRectF(
+                logical_rect.right() - corner_size_logical / 2, 
+                logical_rect.bottom() - corner_size_logical / 2, 
+                corner_size_logical, corner_size_logical))
             
-            # 창 크기 정보 표시 (오른쪽 하단에 표시)
-            size_text = f"{self.current_rect.width()} × {self.current_rect.height()} px"
-            size_bg_rect = QRect(
-                self.current_rect.right() - 150,
-                self.current_rect.bottom() + 10,
-                150,
-                30
+            # 창 크기 정보 표시 (물리적 픽셀 기준, 위치는 논리적 좌표 기준)
+            size_text = f"{self.current_rect.width()} × {self.current_rect.height()} px" # 실제 픽셀 크기 표시
+            size_bg_width_logical = 150 / device_pixel_ratio
+            size_bg_height_logical = 30 / device_pixel_ratio
+            size_bg_rect = QRectF(
+                logical_rect.right() - size_bg_width_logical,
+                logical_rect.bottom() + (10 / device_pixel_ratio),
+                size_bg_width_logical,
+                size_bg_height_logical
             )
             
             # 크기 정보 배경
             painter.setBrush(QColor(0, 0, 0, 180))
-            painter.drawRoundedRect(size_bg_rect, 5, 5)
+            painter.drawRoundedRect(size_bg_rect, 5 / device_pixel_ratio, 5 / device_pixel_ratio)
             
             # 크기 정보 텍스트
             painter.setPen(QColor(255, 255, 255))
             font = painter.font()
-            font.setPointSize(11) # 폰트 크기 수정: 7 -> 11 (1.5배)
+            # 폰트 크기는 논리적 픽셀 기준
+            font.setPointSize(11) 
             font.setBold(True)
             painter.setFont(font)
             painter.drawText(size_bg_rect, Qt.AlignCenter, size_text)
-    
+
     def mousePressEvent(self, event):
         """마우스 클릭 시 창 캡처"""
         if event.button() == Qt.LeftButton:
