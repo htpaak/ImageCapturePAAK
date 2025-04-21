@@ -25,6 +25,7 @@ class CaptureUI(QMainWindow):
         self.selection_end = QPoint()
         self.selection_rect = QRect()
         self.last_capture_path = None
+        self.last_saved_file_path = None
         
         # 캡처 모듈의 저장 경로를 사용 (설정 파일에서 로드된 경로)
         self.default_save_dir = self.capture_module.save_dir
@@ -598,6 +599,7 @@ class CaptureUI(QMainWindow):
             # 캡처 모듈의 저장 함수 호출
             saved_path = self.capture_module.save_captured_image(file_path)
             if saved_path:
+                self.last_saved_file_path = saved_path # 저장된 경로 저장
                 # 상태 표시줄에 저장 완료 메시지 표시 (3초 후 자동 사라짐)
                 self.statusBar().showMessage(f'이미지가 저장되었습니다: {saved_path}', 3000)
                 
@@ -641,15 +643,23 @@ class CaptureUI(QMainWindow):
         try:
             if platform.system() == "Windows":
                 # Windows
-                os.startfile(self.default_save_dir)
+                if self.last_saved_file_path and os.path.exists(self.last_saved_file_path):
+                    # 마지막 저장된 파일이 있으면 해당 파일을 선택하여 폴더 열기
+                    subprocess.run(['explorer', '/select,', self.last_saved_file_path])
+                    self.statusBar().showMessage(f'폴더를 열고 파일을 선택했습니다: {self.last_saved_file_path}', 3000)
+                else:
+                    # 저장된 파일이 없으면 폴더만 열기
+                    os.startfile(self.default_save_dir)
+                    self.statusBar().showMessage(f'폴더를 열었습니다: {self.default_save_dir}', 3000)
             elif platform.system() == "Darwin":
-                # macOS
+                # macOS (파일 선택 기능 미지원, 폴더만 열기)
                 subprocess.call(["open", self.default_save_dir])
+                self.statusBar().showMessage(f'폴더를 열었습니다: {self.default_save_dir}', 3000)
             else:
-                # Linux
+                # Linux (파일 선택 기능 미지원, 폴더만 열기)
                 subprocess.call(["xdg-open", self.default_save_dir])
+                self.statusBar().showMessage(f'폴더를 열었습니다: {self.default_save_dir}', 3000)
                 
-            self.statusBar().showMessage(f'폴더를 열었습니다: {self.default_save_dir}', 3000)
         except Exception as e:
             QMessageBox.warning(self, "오류", f"폴더를 열 수 없습니다: {str(e)}")
 
