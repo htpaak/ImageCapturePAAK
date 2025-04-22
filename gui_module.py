@@ -17,51 +17,67 @@ import win32api  # 윈도우 API 추가
 from utils import get_resource_path
 
 # 클래스 정의 앞에 와야 함
-class FullScreenViewer(QWidget): # 이전에 추가된 클래스 정의
-    """Displays an image in full screen mode."""
+class FullScreenViewer(QWidget):
+    """Displays an image in full screen mode using QPainter."""
     def __init__(self, image_path: str, parent=None):
         super().__init__(parent)
         self.image_path = image_path
-        self.image = QImage(self.image_path) # QImage로 로드
+        self.image = QImage(self.image_path)
+        if self.image.isNull():
+             print(f"Error: Could not load image '{self.image_path}' for full screen.")
         self.initUI()
 
     def initUI(self):
         # Set window properties for full screen display
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        self.setStyleSheet("background-color: black;") # Black background
+        self.setStyleSheet("background-color: black;") # Black background is important
         self.setGeometry(QApplication.primaryScreen().geometry()) # 화면 전체 크기로 설정
 
-        # Label to display the image (Layout 제거, 직접 자식으로 설정)
-        self.image_label = QLabel(self)
-        self.image_label.setAlignment(Qt.AlignCenter)
-        self.image_label.setScaledContents(True) # 라벨 크기에 맞게 이미지 스케일링 활성화
-        self.image_label.setGeometry(self.rect()) # 초기 라벨 크기를 뷰어 크기와 동일하게 설정
+        # QLabel 제거
+        # self.image_label = QLabel(self)
+        # self.image_label.setAlignment(Qt.AlignCenter)
+        # self.image_label.setScaledContents(True)
+        # self.image_label.setGeometry(self.rect())
 
-        # Display the image scaled to fit the screen while maintaining aspect ratio
-        self.update_image_display() # 라벨 크기 설정 후 이미지 업데이트 호출
+        # 레이아웃 제거
+        # layout = QVBoxLayout(self)
+        # layout.addWidget(self.image_label)
+        # layout.setContentsMargins(0, 0, 0, 0)
+        # self.setLayout(layout)
 
-    def update_image_display(self):
-        if self.image.isNull(): # QImage 유효성 검사
-            print("Error: Could not load image for full screen.")
-            return
-        
-        # 스케일링 로직 제거, 원본 이미지 설정으로 복구
-        # scaled_image = self.image.scaled(self.image_label.size(), # 라벨 크기 기준 스케일링
-        #                                 Qt.KeepAspectRatio, 
-        #                                 Qt.SmoothTransformation) 
-        
-        # 스케일된 이미지 설정 라인 제거
-        # self.image_label.setPixmap(QPixmap.fromImage(scaled_image))
-        
-        # 원본 QImage로부터 QPixmap 생성하여 설정 (화질 우선)
-        self.image_label.setPixmap(QPixmap.fromImage(self.image)) 
+        # 초기 그리기를 위해 paintEvent 요청
+        self.update()
+
+    def paintEvent(self, event):
+        """Paint the image directly using QPainter, maintaining aspect ratio."""
+        painter = QPainter(self)
+
+        # 항상 검은색 배경 먼저 칠하기
+        painter.fillRect(self.rect(), Qt.black)
+
+        if self.image.isNull():
+            return # 이미지가 없으면 종료
+
+        # Calculate target rectangle with aspect ratio preserved
+        img_size = self.image.size()
+        widget_rect = self.rect()
+        scaled_size = img_size.scaled(widget_rect.size(), Qt.KeepAspectRatio)
+        x = (widget_rect.width() - scaled_size.width()) / 2
+        y = (widget_rect.height() - scaled_size.height()) / 2
+        target_rect = QRect(QPoint(int(x), int(y)), scaled_size)
+
+        # Set render hint for potentially better quality
+        painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+
+        # Draw the original QImage into the calculated target rectangle
+        painter.drawImage(target_rect, self.image)
 
     def resizeEvent(self, event):
-        """Handle window resize to rescale the image and resize label."""
-        # 라벨 크기를 뷰어 크기와 동일하게 설정
-        self.image_label.setGeometry(self.rect())
-        # 이미지 업데이트는 setScaledContents=True 이므로 QLabel이 처리할 것으로 기대
-        # self.update_image_display() # 명시적 업데이트는 필요 없을 수 있음
+        """Handle window resize: trigger repaint."""
+        # 라벨 크기 조정 제거
+        # self.image_label.setGeometry(self.rect())
+        # update_image_display 호출 제거
+        self.update() # Request a repaint
         super().resizeEvent(event)
 
     def keyPressEvent(self, event):
