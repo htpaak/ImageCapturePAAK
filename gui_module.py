@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout
                            QWidget, QLabel, QFileDialog, QHBoxLayout, QMessageBox,
                            QFrame, QSizePolicy, QToolTip, QStatusBar, QDesktopWidget,
                            QShortcut, QDialog, QListWidget, QListWidgetItem, QAbstractItemView)
-from PyQt5.QtGui import QPixmap, QIcon, QPainter, QPainterPath, QPen, QColor, QBrush, QFont, QKeySequence, QCursor
+from PyQt5.QtGui import QPixmap, QIcon, QPainter, QPainterPath, QPen, QColor, QBrush, QFont, QKeySequence, QCursor, QImage
 from PyQt5.QtCore import Qt, QRect, QPoint, QRectF, QSize, QTimer, QEvent
 import win32gui
 import win32con
@@ -15,6 +15,61 @@ import win32api  # 윈도우 API 추가
 
 # utils.py에서 함수 가져오기
 from utils import get_resource_path
+
+# 클래스 정의 앞에 와야 함
+class FullScreenViewer(QWidget): # 이전에 추가된 클래스 정의
+    """Displays an image in full screen mode."""
+    def __init__(self, image_path: str, parent=None):
+        super().__init__(parent)
+        self.image_path = image_path
+        self.image = QImage(self.image_path) # QImage로 로드
+        self.initUI()
+
+    def initUI(self):
+        # Set window properties for full screen display
+        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setStyleSheet("background-color: black;") # Black background
+        self.setGeometry(QApplication.primaryScreen().geometry()) # 화면 전체 크기로 설정
+
+        # Label to display the image (Layout 제거, 직접 자식으로 설정)
+        self.image_label = QLabel(self)
+        self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setScaledContents(True) # 라벨 크기에 맞게 이미지 스케일링 활성화
+        self.image_label.setGeometry(self.rect()) # 초기 라벨 크기를 뷰어 크기와 동일하게 설정
+
+        # Display the image scaled to fit the screen while maintaining aspect ratio
+        self.update_image_display() # 라벨 크기 설정 후 이미지 업데이트 호출
+
+    def update_image_display(self):
+        if self.image.isNull(): # QImage 유효성 검사
+            print("Error: Could not load image for full screen.")
+            return
+        
+        # 스케일링 로직 제거, 원본 이미지 설정으로 복구
+        # scaled_image = self.image.scaled(self.image_label.size(), # 라벨 크기 기준 스케일링
+        #                                 Qt.KeepAspectRatio, 
+        #                                 Qt.SmoothTransformation) 
+        
+        # 스케일된 이미지 설정 라인 제거
+        # self.image_label.setPixmap(QPixmap.fromImage(scaled_image))
+        
+        # 원본 QImage로부터 QPixmap 생성하여 설정 (화질 우선)
+        self.image_label.setPixmap(QPixmap.fromImage(self.image)) 
+
+    def resizeEvent(self, event):
+        """Handle window resize to rescale the image and resize label."""
+        # 라벨 크기를 뷰어 크기와 동일하게 설정
+        self.image_label.setGeometry(self.rect())
+        # 이미지 업데이트는 setScaledContents=True 이므로 QLabel이 처리할 것으로 기대
+        # self.update_image_display() # 명시적 업데이트는 필요 없을 수 있음
+        super().resizeEvent(event)
+
+    def keyPressEvent(self, event):
+        """Close the full screen viewer when ESC key is pressed."""
+        if event.key() == Qt.Key_Escape:
+            self.close()
+        else:
+            super().keyPressEvent(event)
 
 class CaptureUI(QMainWindow):
     def __init__(self, capture_module):
@@ -26,6 +81,7 @@ class CaptureUI(QMainWindow):
         self.selection_rect = QRect()
         self.last_capture_path = None
         self.last_saved_file_path = None
+        self.fullscreen_viewer = None # 전체 화면 뷰어 참조 추가
         
         # 캡처 모듈의 저장 경로를 사용 (설정 파일에서 로드된 경로)
         self.default_save_dir = self.capture_module.save_dir
@@ -168,11 +224,25 @@ class CaptureUI(QMainWindow):
         line.setStyleSheet("background-color: #cccccc;")
         main_layout.addWidget(line)
 
-        # Preview title
+        # Preview title and placeholder button layout
+        preview_header_layout = QHBoxLayout()
+
         preview_title = QLabel('Captured Image Preview')
         preview_title.setStyleSheet("font-size: 14px; color: #333333;")
-        preview_title.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(preview_title)
+        preview_title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter) # 왼쪽 정렬
+        preview_header_layout.addWidget(preview_title)
+
+        preview_header_layout.addStretch(1) # 공간 확장
+
+        # 작은 풀스크린 버튼 추가 (기능 없음)
+        self.fullscreen_placeholder_btn = QPushButton('Full Screen (esc)') # 텍스트 수정
+        self.fullscreen_placeholder_btn.setFixedSize(135, 30) # 너비 80 -> 100으로 수정
+        self.fullscreen_placeholder_btn.setToolTip('Show preview in full screen (ESC)')
+        self.fullscreen_placeholder_btn.setStyleSheet("font-size: 8pt;") # 폰트 크기 8pt 재추가
+        self.fullscreen_placeholder_btn.clicked.connect(self.show_fullscreen_preview) # 버튼 클릭 연결
+        preview_header_layout.addWidget(self.fullscreen_placeholder_btn)
+
+        main_layout.addLayout(preview_header_layout) # 제목 + 버튼 레이아웃 추가
 
         # Preview frame
         preview_frame = QFrame()
@@ -349,6 +419,12 @@ class CaptureUI(QMainWindow):
         self.shortcut_window = QShortcut(QKeySequence('F8'), self)
         self.shortcut_window.activated.connect(self.capture_window)
         self.window_btn.setText('Window Capture (F8)')
+
+        # 전체 화면 미리보기 단축키 (ESC)
+        self.shortcut_fullscreen = QShortcut(QKeySequence(Qt.Key_Escape), self)
+        self.shortcut_fullscreen.activated.connect(self.show_fullscreen_preview)
+        # ESC 키는 다른 용도로도 사용될 수 있으므로, Context 설정이 중요할 수 있음
+        # self.shortcut_fullscreen.setContext(Qt.ApplicationShortcut) # 또는 Qt.WindowShortcut
 
     def _force_window_to_foreground(self):
         """윈도우 API를 사용하여 창을 강제로 최상위로 가져옵니다"""
@@ -662,6 +738,31 @@ class CaptureUI(QMainWindow):
                 
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Could not open folder: {str(e)}")
+
+    def show_fullscreen_preview(self):
+        """Show the current preview image in full screen."""
+        if self.fullscreen_viewer and self.fullscreen_viewer.isVisible():
+            # 이미 전체 화면 뷰어가 떠 있다면 닫기 (ESC 누른 경우)
+            # self.fullscreen_viewer.close() # FullScreenViewer 자체에서 ESC로 닫음
+            # 여기서 별도 처리는 불필요할 수 있음
+            return 
+            
+        if self.last_capture_path and os.path.exists(self.last_capture_path):
+            pixmap = QPixmap(self.last_capture_path)
+            if pixmap.isNull():
+                self.statusBar().showMessage('Cannot load image for full screen preview.')
+                return
+
+            # Create and show the full screen viewer
+            # 이전 뷰어가 남아있을 수 있으므로 새로 생성하기 전에 확인/정리
+            if self.fullscreen_viewer:
+                self.fullscreen_viewer.close() # 이전 뷰어 닫기
+            # self.fullscreen_viewer = FullScreenViewer(pixmap) # pixmap 대신 경로 전달
+            self.fullscreen_viewer = FullScreenViewer(self.last_capture_path)
+            # self.fullscreen_viewer.showFullScreen() # initUI에서 setGeometry 사용하므로 show() 호출
+            self.fullscreen_viewer.show()
+        else:
+            self.statusBar().showMessage('No image captured to show in full screen.')
 
 
 class WindowSelector(QWidget):
@@ -993,6 +1094,7 @@ class AreaSelector(QWidget):
         """Initialize UI"""
         # Set window to full screen size
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
         self.setGeometry(QApplication.primaryScreen().geometry())
         
         # Set transparent background
