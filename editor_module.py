@@ -93,15 +93,17 @@ class ImageEditor(QMainWindow):
         toolbar = QToolBar("Edit Tools")
         toolbar.setIconSize(QSize(24, 24))
         toolbar.setMovable(False)
+        # 아이콘과 텍스트를 함께 표시하도록 설정 (텍스트는 아이콘 아래에 표시)
+        toolbar.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
         self.addToolBar(toolbar)
         
         # 저장 버튼
-        save_action = QAction("Save", self)
+        save_action = QAction(QIcon("assets/save_icon.svg"), "Save", self)
         save_action.setToolTip("Save image")
         toolbar.addAction(save_action)
         
         # 복사 버튼
-        copy_action = QAction("Copy", self)
+        copy_action = QAction(QIcon("assets/copy_icon.svg"), "Copy", self)
         copy_action.setToolTip("Copy to clipboard")
         toolbar.addAction(copy_action)
         
@@ -109,17 +111,17 @@ class ImageEditor(QMainWindow):
         toolbar.addSeparator()
         
         # 실행 취소 버튼
-        undo_action = QAction("Undo", self)
+        undo_action = QAction(QIcon("assets/undo_icon.svg"), "Undo", self)
         undo_action.setToolTip("Undo last action")
         toolbar.addAction(undo_action)
         
         # 다시 실행 버튼
-        redo_action = QAction("Redo", self)
+        redo_action = QAction(QIcon("assets/redo_icon.svg"), "Redo", self)
         redo_action.setToolTip("Redo last action")
         toolbar.addAction(redo_action)
         
         # 리셋 버튼
-        reset_action = QAction("Reset", self)
+        reset_action = QAction(QIcon("assets/reset_icon.svg"), "Reset", self)
         reset_action.setToolTip("Reset to original image")
         toolbar.addAction(reset_action)
         
@@ -127,17 +129,17 @@ class ImageEditor(QMainWindow):
         toolbar.addSeparator()
         
         # 이미지 회전 버튼
-        rotate_action = QAction("Rotate", self)
+        rotate_action = QAction(QIcon("assets/rotate_icon.svg"), "Rotate", self)
         rotate_action.setToolTip("Rotate image")
         toolbar.addAction(rotate_action)
         
         # 좌우 반전 버튼
-        flip_h_action = QAction("Flip H", self)
+        flip_h_action = QAction(QIcon("assets/flip_h_icon.svg"), "Flip H", self)
         flip_h_action.setToolTip("Flip horizontally")
         toolbar.addAction(flip_h_action)
         
         # 상하 반전 버튼
-        flip_v_action = QAction("Flip V", self)
+        flip_v_action = QAction(QIcon("assets/flip_v_icon.svg"), "Flip V", self)
         flip_v_action.setToolTip("Flip vertically")
         toolbar.addAction(flip_v_action)
         
@@ -147,47 +149,47 @@ class ImageEditor(QMainWindow):
         # 그리기 도구 버튼들
         
         # 도구 선택 버튼
-        select_action = QAction("Select", self)
+        select_action = QAction(QIcon("assets/select_icon.svg"), "Select", self)
         select_action.setToolTip("Select area")
         toolbar.addAction(select_action)
         
         # 자르기 버튼
-        crop_action = QAction("Crop", self)
+        crop_action = QAction(QIcon("assets/crop_icon.svg"), "Crop", self)
         crop_action.setToolTip("Crop image")
         toolbar.addAction(crop_action)
         
         # 텍스트 추가 버튼
-        text_action = QAction("Text", self)
+        text_action = QAction(QIcon("assets/text_icon.svg"), "Text", self)
         text_action.setToolTip("Add text")
         toolbar.addAction(text_action)
         
         # 펜 도구 버튼
-        pen_action = QAction("Pen", self)
+        pen_action = QAction(QIcon("assets/pen_icon.svg"), "Pen", self)
         pen_action.setToolTip("Draw with pen")
         toolbar.addAction(pen_action)
         
         # 강조 도구 버튼
-        highlight_action = QAction("Highlight", self)
+        highlight_action = QAction(QIcon("assets/highlight_icon.svg"), "Highlight", self)
         highlight_action.setToolTip("Highlight area")
         toolbar.addAction(highlight_action)
         
         # 도형 버튼 - 사각형
-        rect_action = QAction("Rectangle", self)
+        rect_action = QAction(QIcon("assets/rectangle_icon.svg"), "Rectangle", self)
         rect_action.setToolTip("Draw rectangle")
         toolbar.addAction(rect_action)
         
         # 도형 버튼 - 원
-        circle_action = QAction("Circle", self)
+        circle_action = QAction(QIcon("assets/circle_icon.svg"), "Circle", self)
         circle_action.setToolTip("Draw circle")
         toolbar.addAction(circle_action)
         
         # 화살표 버튼 (원 버튼 다음으로 이동)
-        arrow_action = QAction("Arrow", self)
+        arrow_action = QAction(QIcon("assets/arrow_icon.svg"), "Arrow", self)
         arrow_action.setToolTip("Draw arrow")
         toolbar.addAction(arrow_action)
         
         # 모자이크 버튼 (화살표 버튼 다음으로 이동)
-        mosaic_action = QAction("Mosaic", self)
+        mosaic_action = QAction(QIcon("assets/mosaic_icon.svg"), "Mosaic", self)
         mosaic_action.setToolTip("Apply mosaic effect")
         toolbar.addAction(mosaic_action)
         
