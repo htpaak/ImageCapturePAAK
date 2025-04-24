@@ -85,7 +85,13 @@ class ImageCanvas(QWidget):
         
         painter.drawImage(target_rect, self.image)
 
-        # 도구별 오버레이 그리기
+        # 하이라이트 오버레이 그리기 (오버레이 이미지가 있으면)
+        if self.editor.highlight_overlay_image and not self.editor.highlight_overlay_image.isNull():
+            # 오버레이 이미지를 동일한 target_rect에 그림
+            painter.drawImage(target_rect, self.editor.highlight_overlay_image)
+            # print("[PaintEvent] Overlay drawn") # 디버그용
+
+        # 도구별 미리보기 그리기 (하이라이트는 오버레이로 대체됨)
         if self.editor.is_selecting and self.editor.selection_start_point and self.editor.selection_end_point:
             start_pt = self.editor.selection_start_point
             end_pt = self.editor.selection_end_point
@@ -154,92 +160,142 @@ class ImageCanvas(QWidget):
                 painter.setBrush(Qt.NoBrush) # 미리보기는 채우지 않음
                 preview_rect_widget = QRect(start_pt, end_pt).normalized()
                 painter.drawRect(preview_rect_widget)
+            # Highlight 미리보기는 오버레이 방식으로 변경되었으므로 여기서는 제거
 
     # 마우스 이벤트 핸들러 추가
     def mousePressEvent(self, event):
-        print("[Canvas] mousePressEvent received") # 디버그 추가
+        print("[Canvas] mousePressEvent received")
         tool = self.editor.current_tool
-        # rectangle 도구 추가
-        if tool in ['mosaic', 'arrow', 'circle', 'rectangle'] and event.button() == Qt.LeftButton:
-            print(f"[Canvas] Activating selection for tool: {tool}") # 디버그 추가
-            self.editor.is_selecting = True
-            self.editor.selection_start_point = event.pos()
-            self.editor.selection_end_point = event.pos()
-            print(f"[Canvas] State after press: is_selecting={self.editor.is_selecting}, tool={self.editor.current_tool}") # 디버그 추가
-            self.update()
+        if tool in ['mosaic', 'arrow', 'circle', 'rectangle', 'highlight'] and event.button() == Qt.LeftButton:
+            print(f"[Canvas] Activating selection/drawing for tool: {tool}")
+            self.editor.is_selecting = True # 드래그/그리기 시작 플래그
+            if tool == 'highlight':
+                 # 오버레이 초기화
+                 if self.editor.highlight_overlay_image:
+                     self.editor.highlight_overlay_image.fill(Qt.transparent)
+                 self.editor.stroke_points = [event.pos()] # 점 리스트 시작 (위젯 좌표)
+            else:
+                self.editor.selection_start_point = event.pos()
+                self.editor.selection_end_point = event.pos()
+            print(f"[Canvas] State after press: is_selecting={self.editor.is_selecting}, tool={self.editor.current_tool}")
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        print("[Canvas] mouseMoveEvent received") # 디버그 추가
-        # rectangle 도구 추가
-        if self.editor.is_selecting and self.editor.current_tool in ['mosaic', 'arrow', 'circle', 'rectangle']:
-            self.editor.selection_end_point = event.pos()
-            self.update()
+        # print("[Canvas] mouseMoveEvent received")
+        if self.editor.is_selecting and self.editor.current_tool in ['mosaic', 'arrow', 'circle', 'rectangle', 'highlight']:
+            if self.editor.current_tool == 'highlight':
+                self.editor.stroke_points.append(event.pos()) # 위젯 좌표 점 추가
+                
+                # 오버레이 클리어 및 전체 Polyline 다시 그리기
+                if self.editor.highlight_overlay_image and len(self.editor.stroke_points) > 1:
+                    self.editor.highlight_overlay_image.fill(Qt.transparent) # 오버레이 클리어
+                    painter = QPainter(self.editor.highlight_overlay_image)
+                    
+                    # 이미지 좌표로 변환된 점 리스트 생성
+                    img_points = [self.map_widget_to_image(p) for p in self.editor.stroke_points if p is not None]
+                    valid_img_points = [p for p in img_points if p is not None]
+
+                    if len(valid_img_points) > 1:
+                        # draw_highlight_stroke와 동일한 펜 설정 사용
+                        pen = QPen(self.editor.highlight_color, 
+                                   self.editor.current_highlight_thickness, 
+                                   Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+                        painter.setPen(pen)
+                        painter.setRenderHint(QPainter.Antialiasing)
+                        
+                        polygon = QPolygonF([QPointF(p) for p in valid_img_points])
+                        painter.drawPolyline(polygon)
+                    painter.end()
+                
+                self.update() # 미리보기 업데이트 요청
+            else:
+                self.editor.selection_end_point = event.pos()
+                self.update() # 도형 미리보기 업데이트
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        print("[Canvas] mouseReleaseEvent received") # 디버그 추가
-        # rectangle 도구 추가
-        if self.editor.is_selecting and event.button() == Qt.LeftButton and self.editor.current_tool in ['mosaic', 'arrow', 'circle', 'rectangle']:
+        print("[Canvas] mouseReleaseEvent received")
+        if self.editor.is_selecting and event.button() == Qt.LeftButton and self.editor.current_tool in ['mosaic', 'arrow', 'circle', 'rectangle', 'highlight']:
             tool = self.editor.current_tool
-            start_widget = self.editor.selection_start_point
-            end_widget = event.pos() 
+            self.editor.is_selecting = False # 여기서 플래그 해제
             
-            self.editor.is_selecting = False 
-
-            if start_widget and end_widget:
-                print(f"[MouseRelease] Tool: {tool}, Start: {start_widget}, End: {end_widget}") # 디버그 출력
-                img_start = self.map_widget_to_image(start_widget)
-                img_end = self.map_widget_to_image(end_widget)
-                print(f"[MouseRelease] Mapped Coords: Start: {img_start}, End: {img_end}") # 디버그 출력
-
-                if img_start and img_end:
-                    if tool == 'mosaic':
-                        selection_rect_widget = QRect(start_widget, end_widget).normalized()
-                        img_rect = QRect(img_start, img_end).normalized()
-                        if img_rect.width() > 0 and img_rect.height() > 0:
-                            print("[MouseRelease] Applying mosaic...") # 디버그 출력
-                            self.editor.push_undo_state() 
-                            self.editor.apply_mosaic(img_rect, self.editor.mosaic_level)
-                            self.editor.update_canvas()
-                        else:
-                            print("Mosaic selection too small.")
-                    elif tool == 'arrow':
-                        if img_start != img_end:
-                             print(f"[MouseRelease] Calling draw_arrow: {img_start} -> {img_end}, Color: {self.editor.arrow_color.name()}, Thickness: {self.editor.current_arrow_thickness}") # 두께 정보 추가
-                             self.editor.push_undo_state()
-                             # draw_arrow 호출 시 현재 저장된 두께 사용
-                             self.editor.draw_arrow(img_start, img_end, self.editor.arrow_color, self.editor.current_arrow_thickness) 
-                             self.editor.update_canvas()
-                        else:
-                             print("Arrow start and end points are the same.")
-                    elif tool == 'circle': # 원 그리기 로직 추가
-                        img_rect = QRect(img_start, img_end).normalized()
-                        if img_rect.width() > 0 and img_rect.height() > 0:
-                            print(f"[MouseRelease] Calling draw_circle: Rect: {img_rect}, Color: {self.editor.circle_color.name()}, Thickness: {self.editor.current_circle_thickness}")
+            if tool == 'highlight':
+                # 마지막 점 추가
+                if hasattr(self.editor, 'stroke_points'):
+                    self.editor.stroke_points.append(event.pos())
+                    if len(self.editor.stroke_points) > 1:
+                        img_points = [self.map_widget_to_image(p) for p in self.editor.stroke_points if p is not None]
+                        valid_img_points = [p for p in img_points if p is not None]
+                        
+                        if len(valid_img_points) > 1:
+                            print(f"[MouseRelease] Calling draw_highlight_stroke on edited_image")
                             self.editor.push_undo_state()
-                            self.editor.draw_circle(img_rect, self.editor.circle_color, self.editor.current_circle_thickness)
-                            self.editor.update_canvas()
-                        else:
-                            print("Circle selection too small.")
-                    elif tool == 'rectangle': # 사각형 그리기 로직 추가
-                        img_rect = QRect(img_start, img_end).normalized()
-                        if img_rect.width() > 0 and img_rect.height() > 0:
-                            print(f"[MouseRelease] Calling draw_rectangle: Rect: {img_rect}, Color: {self.editor.rectangle_color.name()}, Thickness: {self.editor.current_rectangle_thickness}")
-                            self.editor.push_undo_state()
-                            self.editor.draw_rectangle(img_rect, self.editor.rectangle_color, self.editor.current_rectangle_thickness)
-                            self.editor.update_canvas()
-                        else:
-                            print("Rectangle selection too small.")
+                            self.editor.draw_highlight_stroke(valid_img_points, self.editor.highlight_color, self.editor.current_highlight_thickness)
+                            # self.editor.update_canvas() # 아래쪽 공통 update에서 처리
+                        else: print("Highlight stroke too short or invalid.")
+                    else: print("Highlight stroke too short.")
+                    # 오버레이 클리어
+                    if self.editor.highlight_overlay_image:
+                        self.editor.highlight_overlay_image.fill(Qt.transparent)
+            else:
+                # 기존 도형/모자이크 로직
+                start_widget = self.editor.selection_start_point
+                end_widget = event.pos() 
+    
+                if start_widget and end_widget:
+                    print(f"[MouseRelease] Tool: {tool}, Start: {start_widget}, End: {end_widget}") # 디버그 출력
+                    img_start = self.map_widget_to_image(start_widget)
+                    img_end = self.map_widget_to_image(end_widget)
+                    print(f"[MouseRelease] Mapped Coords: Start: {img_start}, End: {img_end}") # 디버그 출력
+    
+                    if img_start and img_end:
+                        if tool == 'mosaic':
+                            selection_rect_widget = QRect(start_widget, end_widget).normalized()
+                            img_rect = QRect(img_start, img_end).normalized()
+                            if img_rect.width() > 0 and img_rect.height() > 0:
+                                print("[MouseRelease] Applying mosaic...") # 디버그 출력
+                                self.editor.push_undo_state() 
+                                self.editor.apply_mosaic(img_rect, self.editor.mosaic_level)
+                                self.editor.update_canvas()
+                            else:
+                                print("Mosaic selection too small.")
+                        elif tool == 'arrow':
+                            if img_start != img_end:
+                                 print(f"[MouseRelease] Calling draw_arrow: {img_start} -> {img_end}, Color: {self.editor.arrow_color.name()}, Thickness: {self.editor.current_arrow_thickness}") # 두께 정보 추가
+                                 self.editor.push_undo_state()
+                                 # draw_arrow 호출 시 현재 저장된 두께 사용
+                                 self.editor.draw_arrow(img_start, img_end, self.editor.arrow_color, self.editor.current_arrow_thickness) 
+                                 self.editor.update_canvas()
+                            else:
+                                 print("Arrow start and end points are the same.")
+                        elif tool == 'circle': # 원 그리기 로직 추가
+                            img_rect = QRect(img_start, img_end).normalized()
+                            if img_rect.width() > 0 and img_rect.height() > 0:
+                                print(f"[MouseRelease] Calling draw_circle: Rect: {img_rect}, Color: {self.editor.circle_color.name()}, Thickness: {self.editor.current_circle_thickness}")
+                                self.editor.push_undo_state()
+                                self.editor.draw_circle(img_rect, self.editor.circle_color, self.editor.current_circle_thickness)
+                                self.editor.update_canvas()
+                            else:
+                                print("Circle selection too small.")
+                        elif tool == 'rectangle': # 사각형 그리기 로직 추가
+                            img_rect = QRect(img_start, img_end).normalized()
+                            if img_rect.width() > 0 and img_rect.height() > 0:
+                                print(f"[MouseRelease] Calling draw_rectangle: Rect: {img_rect}, Color: {self.editor.rectangle_color.name()}, Thickness: {self.editor.current_rectangle_thickness}")
+                                self.editor.push_undo_state()
+                                self.editor.draw_rectangle(img_rect, self.editor.rectangle_color, self.editor.current_rectangle_thickness)
+                                self.editor.update_canvas()
+                            else:
+                                print("Rectangle selection too small.")
 
-            # 상태 초기화 및 커서 복원
-            print("[MouseRelease] Resetting state and cursor.") # 디버그 출력
+            # 공통 상태 초기화 및 커서 복원
+            print("[MouseRelease] Resetting state and cursor.")
             self.editor.selection_start_point = None
             self.editor.selection_end_point = None
-            # rectangle 도구 추가
-            if tool in ['arrow', 'mosaic', 'circle', 'rectangle']: 
+            if hasattr(self.editor, 'stroke_points'): self.editor.stroke_points = []
+            if tool in ['arrow', 'mosaic', 'circle', 'rectangle', 'highlight']: 
                  self.setCursor(Qt.ArrowCursor) 
-            self.update() # 오버레이 지우기
+            self.editor.update_undo_redo_actions()
+            self.update() # 최종 상태 반영 (오버레이 제거 등)
 
         super().mouseReleaseEvent(event)
 
@@ -277,6 +333,12 @@ class ImageEditor(QMainWindow):
         # 사각형 색상/두께 변수 추가
         self.rectangle_color = QColor(Qt.green) # 기본 초록색
         self.current_rectangle_thickness = CustomColorPicker.DEFAULT_THICKNESS # 기본 두께
+        
+        # 하이라이트 색상/두께 변수 추가
+        self.highlight_color = QColor(255, 255, 0, 128) # 기본 노란색, 반투명 (Alpha 128)
+        # 초기 선택값 12px에 대응하는 실제 그리기 두께 24px로 설정
+        self.current_highlight_thickness = 24 
+        self.highlight_overlay_image = None # 하이라이트 오버레이 이미지
         
         # UI 초기화
         self.initUI()
@@ -442,7 +504,8 @@ class ImageEditor(QMainWindow):
         
         # 강조 도구 버튼
         highlight_action = QAction(QIcon("assets/highlight_icon.svg"), "Highlight", self)
-        highlight_action.setToolTip("Highlight area")
+        highlight_action.setToolTip("Highlight area (Select color and thickness)")
+        highlight_action.triggered.connect(self.activate_highlight_tool)
         self.toolbar.addAction(highlight_action)
         
         # 도형 버튼 - 사각형
@@ -624,6 +687,33 @@ class ImageEditor(QMainWindow):
             self.current_tool = None 
             self.image_canvas.setCursor(Qt.ArrowCursor)
 
+    def activate_highlight_tool(self):
+        """하이라이트 도구 활성화, 색상/두께 선택 및 커서 변경"""
+        self.current_tool = 'highlight'
+        # CustomColorPicker 호출 시 현재 하이라이트 색상(투명도 제외) 및 두께 전달
+        # 색상 선택기에서는 투명도를 직접 설정하지 않으므로, 기본 색상의 RGB만 전달
+        # 선택기 초기값 = 실제 두께 / 2 (최소 1)
+        initial_thickness_for_picker = max(1, self.current_highlight_thickness // 2)
+        initial_color_rgb = QColor(self.highlight_color.red(), self.highlight_color.green(), self.highlight_color.blue())
+        color_rgb, selected_thickness, ok = CustomColorPicker.getColorAndThickness(
+            initial_color_rgb, initial_thickness_for_picker, self
+        )
+        
+        if ok:
+            # 선택된 RGB 색상에 저장된 투명도(128)를 다시 적용
+            self.highlight_color = QColor(color_rgb.red(), color_rgb.green(), color_rgb.blue(), 128)
+            # 선택된 두께의 2배를 실제 그리기 두께로 설정
+            self.current_highlight_thickness = selected_thickness * 2 
+            print(f"Highlight tool activated. Selected Thickness (Picker): {selected_thickness}, Drawing Thickness (Actual): {self.current_highlight_thickness}, Color: {self.highlight_color.name(QColor.HexArgb)}")
+            self.image_canvas.setCursor(Qt.CrossCursor) # 또는 다른 적절한 커서
+            self.is_selecting = False # freehand drawing이므로 is_selecting 대신 다른 플래그 사용 가능성 있음
+            self.stroke_points = [] # 스트로크 점 리스트 초기화
+            self.image_canvas.update()
+        else:
+            print("Highlight tool activation cancelled.")
+            self.current_tool = None
+            self.image_canvas.setCursor(Qt.ArrowCursor)
+
     def load_image(self, image_path):
         """이미지 로드 및 표시, Undo 스택 초기화"""
         if not os.path.exists(image_path):
@@ -647,6 +737,9 @@ class ImageEditor(QMainWindow):
         
         filename = os.path.basename(image_path)
         self.setWindowTitle(f'Image Editor - {filename}')
+        
+        # 오버레이 이미지 초기화 (로드된 이미지 크기 기준)
+        self.initialize_overlay()
         
         return True
         
@@ -730,6 +823,41 @@ class ImageEditor(QMainWindow):
         
         painter.end()
         print(f"[DrawRectangle] Finished drawing.")
+
+    def draw_highlight_stroke(self, img_points, color, thickness):
+        """이미지에 하이라이트 획(Polyline) 그리기"""
+        print(f"[DrawHighlight] Entered. Points: {len(img_points)}, Color: {color.name(QColor.HexArgb)}, Thickness: {thickness}")
+        if not self.edited_image or self.edited_image.isNull() or len(img_points) < 2:
+            print("[DrawHighlight] Error: No edited image or not enough points.")
+            return
+
+        painter = QPainter(self.edited_image)
+        # QColor에 이미 투명도가 포함되어 있어야 함 (activate_highlight_tool에서 설정)
+        pen = QPen(color, thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Composition Mode 설정 (선택적, 기본값 SourceOver가 보통 적절)
+        # painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+
+        # 이미지 좌표 점 리스트로 QPolygonF 생성
+        polygon = QPolygonF([QPointF(p) for p in img_points])
+        painter.drawPolyline(polygon)
+        
+        painter.end()
+        print(f"[DrawHighlight] Finished drawing.")
+
+    def initialize_overlay(self):
+        """하이라이트 오버레이 이미지 초기화"""
+        if self.edited_image and not self.edited_image.isNull():
+            # ARGB32_Premultiplied가 투명도 처리에 더 효율적일 수 있음
+            self.highlight_overlay_image = QImage(self.edited_image.size(), QImage.Format_ARGB32_Premultiplied)
+            self.highlight_overlay_image.fill(Qt.transparent) # 투명하게 채움
+            print("[Overlay] Initialized")
+        else:
+            self.highlight_overlay_image = None
+            print("[Overlay] Cleared (no base image)")
 
 # 테스트 코드 (독립 실행용)
 if __name__ == "__main__":
