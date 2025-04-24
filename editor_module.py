@@ -118,6 +118,11 @@ class ImageEditor(QMainWindow):
         redo_action.setToolTip("Redo last action")
         toolbar.addAction(redo_action)
         
+        # 리셋 버튼
+        reset_action = QAction("Reset", self)
+        reset_action.setToolTip("Reset to original image")
+        toolbar.addAction(reset_action)
+        
         # 구분선 추가
         toolbar.addSeparator()
         
@@ -176,37 +181,16 @@ class ImageEditor(QMainWindow):
         circle_action.setToolTip("Draw circle")
         toolbar.addAction(circle_action)
         
-        # 모자이크 버튼
-        mosaic_action = QAction("Mosaic", self)
-        mosaic_action.setToolTip("Apply mosaic effect")
-        toolbar.addAction(mosaic_action)
-        
-        # 화살표 버튼
+        # 화살표 버튼 (원 버튼 다음으로 이동)
         arrow_action = QAction("Arrow", self)
         arrow_action.setToolTip("Draw arrow")
         toolbar.addAction(arrow_action)
         
-        # 스티커/도장 버튼
-        stamp_action = QAction("Stamp", self)
-        stamp_action.setToolTip("Add stamp")
-        toolbar.addAction(stamp_action)
+        # 모자이크 버튼 (화살표 버튼 다음으로 이동)
+        mosaic_action = QAction("Mosaic", self)
+        mosaic_action.setToolTip("Apply mosaic effect")
+        toolbar.addAction(mosaic_action)
         
-        # 구분선 추가
-        toolbar.addSeparator()
-        
-        # 전체 화면 전환 버튼 추가
-        fullscreen_action = QAction("Full Screen", self)
-        fullscreen_action.setToolTip("Toggle full screen mode")
-        fullscreen_action.triggered.connect(self.toggleFullScreen)
-        toolbar.addAction(fullscreen_action)
-        
-    def toggleFullScreen(self):
-        """전체 화면 모드 전환"""
-        if self.isFullScreen():
-            self.showNormal()
-        else:
-            self.showFullScreen()
-            
     def load_image(self, image_path):
         """이미지 로드 및 표시"""
         if not os.path.exists(image_path):
