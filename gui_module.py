@@ -15,6 +15,8 @@ import win32api  # 윈도우 API 추가
 
 # utils.py에서 함수 가져오기
 from utils import get_resource_path
+# 편집기 모듈 가져오기
+from editor_module import ImageEditor
 
 # 클래스 정의 앞에 와야 함
 class FullScreenViewer(QWidget):
@@ -250,12 +252,22 @@ class CaptureUI(QMainWindow):
 
         preview_header_layout.addStretch(1) # 공간 확장
 
-        # 작은 풀스크린 버튼 추가 (기능 없음)
+        # Edit 버튼 추가
+        self.edit_btn = QPushButton('Edit')
+        self.edit_btn.setFixedSize(80, 30) # 크기 설정 (임의)
+        self.edit_btn.setToolTip('Edit the captured image')
+        self.edit_btn.setStyleSheet("font-size: 8pt;")
+        self.edit_btn.clicked.connect(self.open_image_editor) # 편집기 열기 메서드 연결
+        self.edit_btn.setEnabled(False) # 초기에는 비활성화
+        preview_header_layout.addWidget(self.edit_btn) # 레이아웃에 추가
+
+        # 작은 풀스크린 버튼 추가
         self.fullscreen_placeholder_btn = QPushButton('Full Screen (esc)') # 텍스트 수정
         self.fullscreen_placeholder_btn.setFixedSize(135, 30) # 너비 80 -> 100으로 수정
         self.fullscreen_placeholder_btn.setToolTip('Show preview in full screen (ESC)')
         self.fullscreen_placeholder_btn.setStyleSheet("font-size: 8pt;") # 폰트 크기 8pt 재추가
         self.fullscreen_placeholder_btn.clicked.connect(self.show_fullscreen_preview) # 버튼 클릭 연결
+        self.fullscreen_placeholder_btn.setEnabled(False) # 초기에는 비활성화 # Edit 버튼 추가 후 비활성화 유지
         preview_header_layout.addWidget(self.fullscreen_placeholder_btn)
 
         main_layout.addLayout(preview_header_layout) # 제목 + 버튼 레이아웃 추가
@@ -647,6 +659,11 @@ class CaptureUI(QMainWindow):
             self.preview_label.setPixmap(scaled_pixmap)
             self.preview_label.setStyleSheet("background-color: black;")  # 검은색 배경 추가
             
+            # Edit 버튼 활성화
+            self.edit_btn.setEnabled(True)
+            # 풀스크린 버튼 활성화
+            self.fullscreen_placeholder_btn.setEnabled(True)
+            
             # 콘솔에 디버깅 정보 출력
             print(f"원본 이미지 크기: {pixmap.width()}x{pixmap.height()}, "
                   f"레이블 크기: {label_size.width()}x{label_size.height()}, "
@@ -780,6 +797,18 @@ class CaptureUI(QMainWindow):
         else:
             self.statusBar().showMessage('No image captured to show in full screen.')
 
+    def open_image_editor(self):
+        """캡처된 이미지를 편집기로 열기"""
+        if not self.last_capture_path or not os.path.exists(self.last_capture_path):
+            QMessageBox.warning(self, "Error", "No image captured to edit!")
+            return
+            
+        # 이미지 편집기 인스턴스 생성
+        self.image_editor = ImageEditor(self.last_capture_path, self)
+        self.image_editor.show()
+        
+        # 상태 표시줄 메시지 업데이트
+        self.statusBar().showMessage("Image editor opened")
 
 class WindowSelector(QWidget):
     """마우스 호버로 캡처할 창을 선택하는 위젯"""
