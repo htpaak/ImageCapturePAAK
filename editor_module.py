@@ -166,7 +166,7 @@ class ImageCanvas(QWidget):
     def mousePressEvent(self, event):
         print("[Canvas] mousePressEvent received")
         tool = self.editor.current_tool
-        if tool in ['mosaic', 'arrow', 'circle', 'rectangle', 'highlight'] and event.button() == Qt.LeftButton:
+        if tool in ['mosaic', 'arrow', 'circle', 'rectangle', 'highlight', 'pen'] and event.button() == Qt.LeftButton:
             print(f"[Canvas] Activating selection/drawing for tool: {tool}")
             self.editor.is_selecting = True # 드래그/그리기 시작 플래그
             if tool == 'highlight':
@@ -174,6 +174,16 @@ class ImageCanvas(QWidget):
                  if self.editor.highlight_overlay_image:
                      self.editor.highlight_overlay_image.fill(Qt.transparent)
                  self.editor.stroke_points = [event.pos()] # 점 리스트 시작 (위젯 좌표)
+            elif tool == 'pen':
+                # Undo 상태 저장 (스트로크 시작 시 한 번만)
+                self.editor.push_undo_state()
+                # 첫 점 기록 (위젯 좌표 및 이미지 좌표)
+                self.last_draw_point = event.pos()
+                self.last_img_draw_point = self.map_widget_to_image(self.last_draw_point)
+                # 첫 점을 바로 찍는 효과 (선택적)
+                if self.last_img_draw_point:
+                     self.editor.draw_pen_segment(self.last_img_draw_point, self.last_img_draw_point, self.editor.pen_color, self.editor.current_pen_thickness)
+                     self.update() # 첫 점 표시
             else:
                 self.editor.selection_start_point = event.pos()
                 self.editor.selection_end_point = event.pos()
@@ -182,7 +192,7 @@ class ImageCanvas(QWidget):
 
     def mouseMoveEvent(self, event):
         # print("[Canvas] mouseMoveEvent received")
-        if self.editor.is_selecting and self.editor.current_tool in ['mosaic', 'arrow', 'circle', 'rectangle', 'highlight']:
+        if self.editor.is_selecting and self.editor.current_tool in ['mosaic', 'arrow', 'circle', 'rectangle', 'highlight', 'pen']:
             if self.editor.current_tool == 'highlight':
                 self.editor.stroke_points.append(event.pos()) # 위젯 좌표 점 추가
                 
@@ -207,7 +217,18 @@ class ImageCanvas(QWidget):
                         painter.drawPolyline(polygon)
                     painter.end()
                 
-                self.update() # 미리보기 업데이트 요청
+                self.update() # 미리보기 업데이트
+            elif self.editor.current_tool == 'pen':
+                current_pos = event.pos()
+                img_current = self.map_widget_to_image(current_pos)
+                # 이전 이미지 좌표와 현재 이미지 좌표가 모두 유효하면 선분 그리기
+                if self.last_img_draw_point and img_current:
+                    self.editor.draw_pen_segment(self.last_img_draw_point, img_current, self.editor.pen_color, self.editor.current_pen_thickness)
+                # 현재 점을 다음 시작점으로 업데이트
+                self.last_draw_point = current_pos
+                self.last_img_draw_point = img_current
+                # 변경된 이미지를 표시하도록 업데이트 요청
+                self.update()
             else:
                 self.editor.selection_end_point = event.pos()
                 self.update() # 도형 미리보기 업데이트
@@ -215,7 +236,7 @@ class ImageCanvas(QWidget):
 
     def mouseReleaseEvent(self, event):
         print("[Canvas] mouseReleaseEvent received")
-        if self.editor.is_selecting and event.button() == Qt.LeftButton and self.editor.current_tool in ['mosaic', 'arrow', 'circle', 'rectangle', 'highlight']:
+        if self.editor.is_selecting and event.button() == Qt.LeftButton and self.editor.current_tool in ['mosaic', 'arrow', 'circle', 'rectangle', 'highlight', 'pen']:
             tool = self.editor.current_tool
             self.editor.is_selecting = False # 여기서 플래그 해제
             
@@ -237,6 +258,9 @@ class ImageCanvas(QWidget):
                     # 오버레이 클리어
                     if self.editor.highlight_overlay_image:
                         self.editor.highlight_overlay_image.fill(Qt.transparent)
+            elif tool == 'pen':
+                # 펜은 Move에서 이미 그리므로 Release에서는 작업 없음
+                print("[MouseRelease] Pen drawing finished.")
             else:
                 # 기존 도형/모자이크 로직
                 start_widget = self.editor.selection_start_point
@@ -292,7 +316,9 @@ class ImageCanvas(QWidget):
             self.editor.selection_start_point = None
             self.editor.selection_end_point = None
             if hasattr(self.editor, 'stroke_points'): self.editor.stroke_points = []
-            if tool in ['arrow', 'mosaic', 'circle', 'rectangle', 'highlight']: 
+            self.last_draw_point = None        # 펜/하이라이트용 변수 초기화
+            self.last_img_draw_point = None    # 펜/하이라이트용 변수 초기화
+            if tool in ['arrow', 'mosaic', 'circle', 'rectangle', 'highlight', 'pen']: 
                  self.setCursor(Qt.ArrowCursor) 
             self.editor.update_undo_redo_actions()
             self.update() # 최종 상태 반영 (오버레이 제거 등)
@@ -339,6 +365,10 @@ class ImageEditor(QMainWindow):
         # 초기 선택값 12px에 대응하는 실제 그리기 두께 24px로 설정
         self.current_highlight_thickness = 24 
         self.highlight_overlay_image = None # 하이라이트 오버레이 이미지
+        
+        # 펜 색상/두께 변수 추가
+        self.pen_color = QColor(Qt.red) # 기본 빨간색
+        self.current_pen_thickness = CustomColorPicker.DEFAULT_THICKNESS # 기본 두께
         
         # UI 초기화
         self.initUI()
@@ -499,7 +529,8 @@ class ImageEditor(QMainWindow):
         
         # 펜 도구 버튼
         pen_action = QAction(QIcon("assets/pen_icon.svg"), "Pen", self)
-        pen_action.setToolTip("Draw with pen")
+        pen_action.setToolTip("Draw with pen (Select color and thickness)") # 툴팁 수정
+        pen_action.triggered.connect(self.activate_pen_tool) # 시그널 연결 추가
         self.toolbar.addAction(pen_action)
         
         # 강조 도구 버튼
@@ -687,6 +718,26 @@ class ImageEditor(QMainWindow):
             self.current_tool = None 
             self.image_canvas.setCursor(Qt.ArrowCursor)
 
+    def activate_pen_tool(self):
+        """펜 도구 활성화, 색상/두께 선택 및 커서 변경"""
+        self.current_tool = 'pen'
+        # CustomColorPicker 호출 시 현재 펜 색상 및 두께 전달
+        color, thickness, ok = CustomColorPicker.getColorAndThickness(
+            self.pen_color, self.current_pen_thickness, self
+        )
+        
+        if ok:
+            self.pen_color = color
+            self.current_pen_thickness = thickness
+            print(f"Pen tool activated. Color: {self.pen_color.name()}, Thickness: {self.current_pen_thickness}")
+            self.image_canvas.setCursor(Qt.CrossCursor) # 또는 Qt.PointingHandCursor 등
+            self.is_selecting = False # 그리기 상태 초기화
+            self.image_canvas.update()
+        else:
+            print("Pen tool activation cancelled.")
+            self.current_tool = None
+            self.image_canvas.setCursor(Qt.ArrowCursor)
+
     def activate_highlight_tool(self):
         """하이라이트 도구 활성화, 색상/두께 선택 및 커서 변경"""
         self.current_tool = 'highlight'
@@ -823,6 +874,23 @@ class ImageEditor(QMainWindow):
         
         painter.end()
         print(f"[DrawRectangle] Finished drawing.")
+
+    def draw_pen_segment(self, img_start_pt, img_end_pt, color, thickness):
+        """이미지에 펜 선분(Segment) 그리기 (불투명)"""
+        if not self.edited_image or self.edited_image.isNull() or not img_start_pt or not img_end_pt:
+            return
+        if img_start_pt == img_end_pt:
+            return
+
+        painter = QPainter(self.edited_image)
+        # 펜 색상은 불투명 (Alpha 255)
+        pen_color_opaque = QColor(color.red(), color.green(), color.blue(), 255)
+        pen = QPen(pen_color_opaque, thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        painter.setPen(pen)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        painter.drawLine(img_start_pt, img_end_pt)
+        painter.end()
 
     def draw_highlight_stroke(self, img_points, color, thickness):
         """이미지에 하이라이트 획(Polyline) 그리기"""
