@@ -2,9 +2,12 @@ import os
 import sys
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QLabel, QAction, 
                             QToolBar, QFileDialog, QMessageBox, QApplication, QDesktopWidget, 
-                            QToolButton, QMenu)
-from PyQt5.QtGui import QPixmap, QImage, QIcon, QPainter, QPen, QColor
-from PyQt5.QtCore import Qt, QSize, QRect, QPoint, QRectF, QSizeF
+                            QToolButton, QMenu, QColorDialog, QComboBox)
+from PyQt5.QtGui import QPixmap, QImage, QIcon, QPainter, QPen, QColor, QPolygonF, QBrush
+from PyQt5.QtCore import Qt, QSize, QRect, QPoint, QRectF, QSizeF, QLineF, QPointF
+import math
+# 사용자 정의 색상 선택기 import
+from color_picker_module import CustomColorPicker 
 
 class ImageCanvas(QWidget):
     """이미지를 직접 그리는 캔버스 위젯"""
@@ -82,62 +85,111 @@ class ImageCanvas(QWidget):
         
         painter.drawImage(target_rect, self.image)
 
-        # 모자이크 도구 선택 중일 때 사각형 그리기
-        if self.editor.is_selecting and self.editor.current_tool == 'mosaic':
-            pen = QPen(Qt.white, 1, Qt.DashLine)
-            painter.setPen(pen)
-            painter.setBrush(Qt.NoBrush)
-            # selection_start_point와 selection_end_point가 None이 아닐 때만 그림
-            if self.editor.selection_start_point and self.editor.selection_end_point:
-                selection_rect_widget = QRect(self.editor.selection_start_point, 
-                                              self.editor.selection_end_point).normalized()
+        # 도구별 오버레이 그리기
+        if self.editor.is_selecting and self.editor.selection_start_point and self.editor.selection_end_point:
+            start_pt = self.editor.selection_start_point
+            end_pt = self.editor.selection_end_point
+            
+            if self.editor.current_tool == 'mosaic':
+                pen = QPen(Qt.white, 1, Qt.DashLine)
+                painter.setPen(pen)
+                painter.setBrush(Qt.NoBrush)
+                selection_rect_widget = QRect(start_pt, end_pt).normalized()
                 painter.drawRect(selection_rect_widget)
+            elif self.editor.current_tool == 'arrow':
+                thickness_img_px = self.editor.current_arrow_thickness 
+                print(f"[PaintEvent] Drawing temporary arrow: {start_pt} -> {end_pt}, Color: {self.editor.arrow_color.name()}, ImgThickness: {thickness_img_px}") 
+                
+                # 이미지 스케일 계산
+                if img_size.width() > 0 and img_size.height() > 0: 
+                    scale_x = scaled_size.width() / img_size.width()
+                else:
+                    scale_x = 1.0
+                
+                # 미리보기용 펜 두께 계산 (스케일 적용 후 반올림, 최소 1px)
+                preview_thickness = max(1, round(thickness_img_px * scale_x)) # 반올림 후 최소 1 적용
+
+                pen = QPen(self.editor.arrow_color, preview_thickness) # 스케일 적용 및 반올림된 두께 사용
+                painter.setPen(pen)
+                painter.setBrush(QBrush(self.editor.arrow_color)) 
+                line = QLineF(start_pt, end_pt)
+                painter.drawLine(line)
+                
+                # 화살촉 크기 계산 (이미지 기준 두께 사용 후 스케일 적용)
+                arrow_size_img_px = 3.0 * thickness_img_px + 4 
+                arrow_size_widget_px = arrow_size_img_px * scale_x 
+                
+                angle = math.atan2(-line.dy(), line.dx())
+                arrow_p1 = line.p2() - QPointF(math.cos(angle + math.pi / 6) * arrow_size_widget_px,
+                                              -math.sin(angle + math.pi / 6) * arrow_size_widget_px)
+                arrow_p2 = line.p2() - QPointF(math.cos(angle - math.pi / 6) * arrow_size_widget_px,
+                                              -math.sin(angle - math.pi / 6) * arrow_size_widget_px)
+                arrow_head = QPolygonF([line.p2(), arrow_p1, arrow_p2])
+                painter.drawPolygon(arrow_head)
 
     # 마우스 이벤트 핸들러 추가
     def mousePressEvent(self, event):
-        if self.editor.current_tool == 'mosaic' and event.button() == Qt.LeftButton:
+        print("[Canvas] mousePressEvent received") # 디버그 추가
+        tool = self.editor.current_tool
+        if tool in ['mosaic', 'arrow'] and event.button() == Qt.LeftButton:
+            print(f"[Canvas] Activating selection for tool: {tool}") # 디버그 추가
             self.editor.is_selecting = True
             self.editor.selection_start_point = event.pos()
             self.editor.selection_end_point = event.pos()
+            print(f"[Canvas] State after press: is_selecting={self.editor.is_selecting}, tool={self.editor.current_tool}") # 디버그 추가
             self.update()
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if self.editor.is_selecting and self.editor.current_tool == 'mosaic':
+        print("[Canvas] mouseMoveEvent received") # 디버그 추가
+        if self.editor.is_selecting and self.editor.current_tool in ['mosaic', 'arrow']:
             self.editor.selection_end_point = event.pos()
             self.update()
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if self.editor.is_selecting and self.editor.current_tool == 'mosaic' and event.button() == Qt.LeftButton:
-            self.editor.is_selecting = False
+        print("[Canvas] mouseReleaseEvent received") # 디버그 추가
+        if self.editor.is_selecting and event.button() == Qt.LeftButton:
+            tool = self.editor.current_tool
             start_widget = self.editor.selection_start_point
-            end_widget = event.pos() # Release 시점의 위치 사용
+            end_widget = event.pos() 
+            
+            self.editor.is_selecting = False 
 
-            if start_widget and end_widget: # None 체크
-                selection_rect_widget = QRect(start_widget, end_widget).normalized()
+            if start_widget and end_widget:
+                print(f"[MouseRelease] Tool: {tool}, Start: {start_widget}, End: {end_widget}") # 디버그 출력
+                img_start = self.map_widget_to_image(start_widget)
+                img_end = self.map_widget_to_image(end_widget)
+                print(f"[MouseRelease] Mapped Coords: Start: {img_start}, End: {img_end}") # 디버그 출력
 
-                # 위젯 좌표를 이미지 좌표로 변환
-                img_top_left = self.map_widget_to_image(selection_rect_widget.topLeft())
-                img_bottom_right = self.map_widget_to_image(selection_rect_widget.bottomRight())
+                if img_start and img_end:
+                    if tool == 'mosaic':
+                        selection_rect_widget = QRect(start_widget, end_widget).normalized()
+                        img_rect = QRect(img_start, img_end).normalized()
+                        if img_rect.width() > 0 and img_rect.height() > 0:
+                            print("[MouseRelease] Applying mosaic...") # 디버그 출력
+                            self.editor.push_undo_state() 
+                            self.editor.apply_mosaic(img_rect, self.editor.mosaic_level)
+                            self.editor.update_canvas()
+                        else:
+                            print("Mosaic selection too small.")
+                    elif tool == 'arrow':
+                        if img_start != img_end:
+                             print(f"[MouseRelease] Calling draw_arrow: {img_start} -> {img_end}, Color: {self.editor.arrow_color.name()}, Thickness: {self.editor.current_arrow_thickness}") # 두께 정보 추가
+                             self.editor.push_undo_state()
+                             # draw_arrow 호출 시 현재 저장된 두께 사용
+                             self.editor.draw_arrow(img_start, img_end, self.editor.arrow_color, self.editor.current_arrow_thickness) 
+                             self.editor.update_canvas()
+                        else:
+                             print("Arrow start and end points are the same.")
 
-                if img_top_left and img_bottom_right:
-                    img_rect = QRect(img_top_left, img_bottom_right).normalized()
-                    
-                    # 영역 크기가 유효한지 확인 (예: 최소 1x1 픽셀)
-                    if img_rect.width() > 0 and img_rect.height() > 0:
-                        # Undo 상태 저장 후 모자이크 적용
-                        self.editor.push_undo_state() 
-                        self.editor.apply_mosaic(img_rect, self.editor.mosaic_level)
-                        self.editor.update_canvas() # 변경사항 반영
-                    else:
-                        print("선택 영역이 너무 작습니다.") # 사용자 피드백
-
-            # 선택 상태 초기화 및 커서 복원
+            # 상태 초기화 및 커서 복원
+            print("[MouseRelease] Resetting state and cursor.") # 디버그 출력
             self.editor.selection_start_point = None
             self.editor.selection_end_point = None
-            self.setCursor(Qt.ArrowCursor) 
-            self.update() # 마지막 사각형 지우기
+            if tool == 'arrow' or tool == 'mosaic': 
+                 self.setCursor(Qt.ArrowCursor) 
+            self.update() # 오버레이 지우기
 
         super().mouseReleaseEvent(event)
 
@@ -145,6 +197,8 @@ class ImageEditor(QMainWindow):
     """이미지 편집 기능을 제공하는 창"""
     # 모자이크 레벨 상수 정의
     MOSAIC_LEVELS = {'Weak': 5, 'Medium': 10, 'Strong': 20}
+    # 기본 화살표 두께 옵션
+    # ARROW_THICKNESS_OPTIONS = ["1px", "2px", "3px", "5px", "8px"] 
 
     def __init__(self, image_path=None, parent=None):
         super().__init__(parent)
@@ -161,6 +215,12 @@ class ImageEditor(QMainWindow):
         self.is_selecting = False
         self.selection_start_point = None
         self.selection_end_point = None
+        
+        # 화살표 색상 변수 추가 (기본값 빨강)
+        self.arrow_color = QColor(Qt.red) 
+        # 화살표 두께 상태 변수 추가 (기본값 2)
+        # self.arrow_thickness = 2 
+        self.current_arrow_thickness = CustomColorPicker.DEFAULT_THICKNESS # 기본값으로 초기화
         
         # UI 초기화
         self.initUI()
@@ -340,7 +400,8 @@ class ImageEditor(QMainWindow):
         
         # 화살표 버튼 (원 버튼 다음으로 이동)
         arrow_action = QAction(QIcon("assets/arrow_icon.svg"), "Arrow", self)
-        arrow_action.setToolTip("Draw arrow")
+        arrow_action.setToolTip("Draw arrow (Select color and thickness)") # 툴팁 수정
+        arrow_action.triggered.connect(self.activate_arrow_tool)
         toolbar.addAction(arrow_action)
         
         # 모자이크 버튼 (QToolButton + QMenu)
@@ -437,6 +498,29 @@ class ImageEditor(QMainWindow):
         print(f"Applied mosaic to rect: {target_rect} with block size: {block_size}")
         # self.update_canvas() # mouseReleaseEvent에서 호출됨
 
+    def activate_arrow_tool(self):
+        """화살표 도구 활성화, 색상/두께 선택 및 커서 변경"""
+        self.current_tool = 'arrow'
+        # CustomColorPicker 호출 시 현재 두께 전달, 반환값으로 두께 받음
+        color, thickness, ok = CustomColorPicker.getColorAndThickness(
+            self.arrow_color, self.current_arrow_thickness, self 
+        ) 
+        
+        if ok:
+            self.arrow_color = color
+            # 반환된 두께로 업데이트
+            self.current_arrow_thickness = thickness 
+            print(f"Arrow tool activated. Color: {self.arrow_color.name()}, Thickness: {self.current_arrow_thickness}")
+            self.image_canvas.setCursor(Qt.CrossCursor)
+            self.is_selecting = False
+            self.selection_start_point = None
+            self.selection_end_point = None
+            self.image_canvas.update()
+        else: 
+            print("Arrow tool activation cancelled.")
+            self.current_tool = None 
+            self.image_canvas.setCursor(Qt.ArrowCursor)
+
     def load_image(self, image_path):
         """이미지 로드 및 표시, Undo 스택 초기화"""
         if not os.path.exists(image_path):
@@ -475,6 +559,38 @@ class ImageEditor(QMainWindow):
         center_point = screen_geometry.center()
         window_geometry.moveCenter(center_point)
         self.move(window_geometry.topLeft())
+
+    def draw_arrow(self, img_start_pt, img_end_pt, color, thickness):
+        """이미지에 화살표 그리기 (두께 파라미터 추가)"""
+        print(f"[DrawArrow] Entered. Start: {img_start_pt}, End: {img_end_pt}, Color: {color.name()}, Thickness: {thickness}") # 두께 정보 추가
+        if not self.edited_image or self.edited_image.isNull():
+            print("[DrawArrow] Error: No edited image.") # 디버그 출력
+            return
+
+        painter = QPainter(self.edited_image)
+        # thickness 파라미터 사용
+        pen = QPen(color, thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin) 
+        painter.setPen(pen)
+        painter.setBrush(QBrush(color)) 
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        line = QLineF(img_start_pt, img_end_pt)
+        painter.drawLine(line)
+
+        # 두께에 비례하는 화살촉 크기
+        arrow_size = 3.0 * thickness + 4 
+        angle = math.atan2(-line.dy(), line.dx())
+
+        arrow_p1 = line.p2() - QPointF(math.cos(angle + math.pi / 6) * arrow_size,
+                                      -math.sin(angle + math.pi / 6) * arrow_size)
+        arrow_p2 = line.p2() - QPointF(math.cos(angle - math.pi / 6) * arrow_size,
+                                      -math.sin(angle - math.pi / 6) * arrow_size)
+                                      
+        arrow_head = QPolygonF([line.p2(), arrow_p1, arrow_p2])
+        painter.drawPolygon(arrow_head)
+        
+        painter.end()
+        print(f"[DrawArrow] Finished drawing.") # 디버그 출력
 
 # 테스트 코드 (독립 실행용)
 if __name__ == "__main__":
