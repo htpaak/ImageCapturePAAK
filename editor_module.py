@@ -140,13 +140,27 @@ class ImageCanvas(QWidget):
                 painter.setBrush(Qt.NoBrush) # 미리보기는 채우지 않음
                 preview_rect_widget = QRect(start_pt, end_pt).normalized()
                 painter.drawEllipse(preview_rect_widget)
+            elif self.editor.current_tool == 'rectangle': # 사각형 그리기 미리보기 추가
+                thickness_img_px = self.editor.current_rectangle_thickness
+                # 이미지 스케일 계산 (원과 동일 로직 사용)
+                if img_size.width() > 0 and img_size.height() > 0:
+                    scale_x = scaled_size.width() / img_size.width()
+                else:
+                    scale_x = 1.0
+                preview_thickness = max(1, round(thickness_img_px * scale_x))
+                
+                pen = QPen(self.editor.rectangle_color, preview_thickness, Qt.SolidLine)
+                painter.setPen(pen)
+                painter.setBrush(Qt.NoBrush) # 미리보기는 채우지 않음
+                preview_rect_widget = QRect(start_pt, end_pt).normalized()
+                painter.drawRect(preview_rect_widget)
 
     # 마우스 이벤트 핸들러 추가
     def mousePressEvent(self, event):
         print("[Canvas] mousePressEvent received") # 디버그 추가
         tool = self.editor.current_tool
-        # circle 도구 추가
-        if tool in ['mosaic', 'arrow', 'circle'] and event.button() == Qt.LeftButton:
+        # rectangle 도구 추가
+        if tool in ['mosaic', 'arrow', 'circle', 'rectangle'] and event.button() == Qt.LeftButton:
             print(f"[Canvas] Activating selection for tool: {tool}") # 디버그 추가
             self.editor.is_selecting = True
             self.editor.selection_start_point = event.pos()
@@ -157,16 +171,16 @@ class ImageCanvas(QWidget):
 
     def mouseMoveEvent(self, event):
         print("[Canvas] mouseMoveEvent received") # 디버그 추가
-        # circle 도구 추가
-        if self.editor.is_selecting and self.editor.current_tool in ['mosaic', 'arrow', 'circle']:
+        # rectangle 도구 추가
+        if self.editor.is_selecting and self.editor.current_tool in ['mosaic', 'arrow', 'circle', 'rectangle']:
             self.editor.selection_end_point = event.pos()
             self.update()
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
         print("[Canvas] mouseReleaseEvent received") # 디버그 추가
-        # circle 도구 추가
-        if self.editor.is_selecting and event.button() == Qt.LeftButton and self.editor.current_tool in ['mosaic', 'arrow', 'circle']:
+        # rectangle 도구 추가
+        if self.editor.is_selecting and event.button() == Qt.LeftButton and self.editor.current_tool in ['mosaic', 'arrow', 'circle', 'rectangle']:
             tool = self.editor.current_tool
             start_widget = self.editor.selection_start_point
             end_widget = event.pos() 
@@ -208,13 +222,22 @@ class ImageCanvas(QWidget):
                             self.editor.update_canvas()
                         else:
                             print("Circle selection too small.")
+                    elif tool == 'rectangle': # 사각형 그리기 로직 추가
+                        img_rect = QRect(img_start, img_end).normalized()
+                        if img_rect.width() > 0 and img_rect.height() > 0:
+                            print(f"[MouseRelease] Calling draw_rectangle: Rect: {img_rect}, Color: {self.editor.rectangle_color.name()}, Thickness: {self.editor.current_rectangle_thickness}")
+                            self.editor.push_undo_state()
+                            self.editor.draw_rectangle(img_rect, self.editor.rectangle_color, self.editor.current_rectangle_thickness)
+                            self.editor.update_canvas()
+                        else:
+                            print("Rectangle selection too small.")
 
             # 상태 초기화 및 커서 복원
             print("[MouseRelease] Resetting state and cursor.") # 디버그 출력
             self.editor.selection_start_point = None
             self.editor.selection_end_point = None
-            # circle 도구 추가
-            if tool in ['arrow', 'mosaic', 'circle']: 
+            # rectangle 도구 추가
+            if tool in ['arrow', 'mosaic', 'circle', 'rectangle']: 
                  self.setCursor(Qt.ArrowCursor) 
             self.update() # 오버레이 지우기
 
@@ -250,6 +273,10 @@ class ImageEditor(QMainWindow):
         # 원 색상/두께 변수 추가
         self.circle_color = QColor(Qt.blue) # 기본 파란색
         self.current_circle_thickness = CustomColorPicker.DEFAULT_THICKNESS # 기본 두께
+        
+        # 사각형 색상/두께 변수 추가
+        self.rectangle_color = QColor(Qt.green) # 기본 초록색
+        self.current_rectangle_thickness = CustomColorPicker.DEFAULT_THICKNESS # 기본 두께
         
         # UI 초기화
         self.initUI()
@@ -420,7 +447,8 @@ class ImageEditor(QMainWindow):
         
         # 도형 버튼 - 사각형
         rect_action = QAction(QIcon("assets/rectangle_icon.svg"), "Rectangle", self)
-        rect_action.setToolTip("Draw rectangle")
+        rect_action.setToolTip("Draw rectangle (Select color and thickness)")
+        rect_action.triggered.connect(self.activate_rectangle_tool)
         self.toolbar.addAction(rect_action)
         
         # 도형 버튼 - 원
@@ -528,6 +556,28 @@ class ImageEditor(QMainWindow):
         painter.end()
         print(f"Applied mosaic to rect: {target_rect} with block size: {block_size}")
         # self.update_canvas() # mouseReleaseEvent에서 호출됨
+
+    def activate_rectangle_tool(self):
+        """사각형 그리기 도구 활성화, 색상/두께 선택 및 커서 변경"""
+        self.current_tool = 'rectangle'
+        # CustomColorPicker 호출 시 현재 사각형의 색상/두께 전달
+        color, thickness, ok = CustomColorPicker.getColorAndThickness(
+            self.rectangle_color, self.current_rectangle_thickness, self
+        )
+        
+        if ok:
+            self.rectangle_color = color
+            self.current_rectangle_thickness = thickness
+            print(f"Rectangle tool activated. Color: {self.rectangle_color.name()}, Thickness: {self.current_rectangle_thickness}")
+            self.image_canvas.setCursor(Qt.CrossCursor)
+            self.is_selecting = False
+            self.selection_start_point = None
+            self.selection_end_point = None
+            self.image_canvas.update()
+        else:
+            print("Rectangle tool activation cancelled.")
+            self.current_tool = None
+            self.image_canvas.setCursor(Qt.ArrowCursor)
 
     def activate_circle_tool(self):
         """원 그리기 도구 활성화, 색상/두께 선택 및 커서 변경"""
@@ -662,6 +712,24 @@ class ImageEditor(QMainWindow):
         
         painter.end()
         print(f"[DrawCircle] Finished drawing.")
+
+    def draw_rectangle(self, img_rect, color, thickness):
+        """이미지에 사각형 그리기"""
+        print(f"[DrawRectangle] Entered. Rect: {img_rect}, Color: {color.name()}, Thickness: {thickness}")
+        if not self.edited_image or self.edited_image.isNull():
+            print("[DrawRectangle] Error: No edited image.")
+            return
+
+        painter = QPainter(self.edited_image)
+        pen = QPen(color, thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush) # 사각형은 외곽선만 그림
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        painter.drawRect(img_rect)
+        
+        painter.end()
+        print(f"[DrawRectangle] Finished drawing.")
 
 # 테스트 코드 (독립 실행용)
 if __name__ == "__main__":

@@ -367,7 +367,8 @@ class CustomColorPicker(QDialog):
 
     def update_controls(self, color: QColor):
         """색상 변경에 따라 모든 관련 컨트롤 값 업데이트 (재귀 방지 포함)"""
-        if self._selected_color == color: return # 임시 재귀 방지
+        # 초기화 시 값 설정을 막는 중복 방지 코드 제거
+        # if self._selected_color == color: return 
              
         self._selected_color = color
         self._update_preview()
