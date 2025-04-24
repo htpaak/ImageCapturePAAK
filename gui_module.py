@@ -300,9 +300,11 @@ class CaptureUI(QMainWindow):
 
         # Preview label
         self.preview_label = QLabel('The preview will be displayed here after capture')
+        self.preview_label.setObjectName("previewLabel") # 객체 이름 설정
         self.preview_label.setAlignment(Qt.AlignCenter)
-        self.preview_label.setStyleSheet("color: #888888; font-size: 15px;") # 폰트 크기 수정: 10px -> 15px (1.5배)
-        self.preview_label.setMinimumHeight(282)  # 최소 높이 수정: 240 -> 288 (1.2배)
+        # 객체 이름 선택자로 스타일 적용
+        self.preview_label.setStyleSheet("#previewLabel { color: #888888; font-size: 8pt; }") 
+        self.preview_label.setMinimumHeight(282)  
         
         # 레이블 크기 정책 설정 - 컨테이너를 채우도록 설정
         self.preview_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -641,7 +643,8 @@ class CaptureUI(QMainWindow):
             
             if pixmap.isNull():
                 self.preview_label.setText('Cannot load image')
-                self.preview_label.setStyleSheet("color: #888888; font-size: 8px;")
+                # 객체 이름 선택자로 스타일 적용 (배경색 유지)
+                self.preview_label.setStyleSheet("#previewLabel { color: #888888; font-size: 8pt; background-color: white; }") 
                 return
             
             # 레이블 최대 크기 가져오기
@@ -657,7 +660,8 @@ class CaptureUI(QMainWindow):
             
             # 스케일링된 이미지 설정
             self.preview_label.setPixmap(scaled_pixmap)
-            self.preview_label.setStyleSheet("background-color: black;")  # 검은색 배경 추가
+            # 객체 이름 선택자로 스타일 적용 (배경색 유지)
+            self.preview_label.setStyleSheet("#previewLabel { background-color: black; }") 
             
             # Edit 버튼 활성화
             self.edit_btn.setEnabled(True)
@@ -671,7 +675,11 @@ class CaptureUI(QMainWindow):
         else:
             # 이미지를 찾을 수 없는 경우
             self.preview_label.setText('Cannot load image')
-            self.preview_label.setStyleSheet("color: #888888; font-size: 8px; background-color: white;")
+            # 객체 이름 선택자로 스타일 적용 (배경색 유지)
+            self.preview_label.setStyleSheet("#previewLabel { color: #888888; font-size: 8pt; background-color: white; }") 
+            # Edit 버튼 비활성화
+            self.edit_btn.setEnabled(False)
+            self.fullscreen_placeholder_btn.setEnabled(False)
 
     def set_save_path(self):
         """Set save path"""

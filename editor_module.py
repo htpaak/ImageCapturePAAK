@@ -305,104 +305,105 @@ class ImageEditor(QMainWindow):
 
     def createToolBar(self):
         """툴바 생성 및 버튼 추가 (모자이크 버튼 수정)"""
-        toolbar = QToolBar("Edit Tools")
-        toolbar.setIconSize(QSize(24, 24))
-        toolbar.setMovable(False)
-        toolbar.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-        self.addToolBar(toolbar)
+        self.toolbar = QToolBar("Main Toolbar")
+        self.toolbar.setIconSize(QSize(24, 24))
+        self.toolbar.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        # Set font size for toolbar buttons
+        self.toolbar.setStyleSheet("QToolButton { font-size: 8pt; }")
+        self.addToolBar(self.toolbar)
         
         # 저장 버튼
         save_action = QAction(QIcon("assets/save_icon.svg"), "Save", self)
         save_action.setToolTip("Save image")
-        toolbar.addAction(save_action)
+        self.toolbar.addAction(save_action)
         
         copy_action = QAction(QIcon("assets/copy_icon.svg"), "Copy", self)
         copy_action.setToolTip("Copy to clipboard")
-        toolbar.addAction(copy_action)
+        self.toolbar.addAction(copy_action)
         
-        toolbar.addSeparator()
+        self.toolbar.addSeparator()
 
         # 실행 취소 버튼 (undo_action_triggered 연결)
         self.undo_action = QAction(QIcon("assets/undo_icon.svg"), "Undo", self)
         self.undo_action.setToolTip("Undo last action")
         self.undo_action.triggered.connect(self.undo_action_triggered)
         self.undo_action.setEnabled(False) # 초기 비활성화
-        toolbar.addAction(self.undo_action)
+        self.toolbar.addAction(self.undo_action)
         
         # 다시 실행 버튼 (redo_action_triggered 연결)
         self.redo_action = QAction(QIcon("assets/redo_icon.svg"), "Redo", self)
         self.redo_action.setToolTip("Redo last action")
         self.redo_action.triggered.connect(self.redo_action_triggered)
         self.redo_action.setEnabled(False) # 초기 비활성화
-        toolbar.addAction(self.redo_action)
+        self.toolbar.addAction(self.redo_action)
 
         # 리셋 버튼 (기능 구현 필요)
         reset_action = QAction(QIcon("assets/reset_icon.svg"), "Reset", self)
         reset_action.setToolTip("Reset to original image")
         # reset_action.triggered.connect(self.reset_image) # 예시 연결
-        toolbar.addAction(reset_action)
+        self.toolbar.addAction(reset_action)
         
-        toolbar.addSeparator()
+        self.toolbar.addSeparator()
         
         # 이미지 회전 버튼
         rotate_action = QAction(QIcon("assets/rotate_icon.svg"), "Rotate", self)
         rotate_action.setToolTip("Rotate image")
-        toolbar.addAction(rotate_action)
+        self.toolbar.addAction(rotate_action)
         
         # 좌우 반전 버튼
         flip_h_action = QAction(QIcon("assets/flip_h_icon.svg"), "Flip H", self)
         flip_h_action.setToolTip("Flip horizontally")
-        toolbar.addAction(flip_h_action)
+        self.toolbar.addAction(flip_h_action)
         
         # 상하 반전 버튼
         flip_v_action = QAction(QIcon("assets/flip_v_icon.svg"), "Flip V", self)
         flip_v_action.setToolTip("Flip vertically")
-        toolbar.addAction(flip_v_action)
+        self.toolbar.addAction(flip_v_action)
 
-        toolbar.addSeparator()
+        self.toolbar.addSeparator()
 
         # 그리기 도구 버튼들
         
         # 도구 선택 버튼
         select_action = QAction(QIcon("assets/select_icon.svg"), "Select", self)
         select_action.setToolTip("Select area")
-        toolbar.addAction(select_action)
+        self.toolbar.addAction(select_action)
         
         # 자르기 버튼
         crop_action = QAction(QIcon("assets/crop_icon.svg"), "Crop", self)
         crop_action.setToolTip("Crop image")
-        toolbar.addAction(crop_action)
+        self.toolbar.addAction(crop_action)
         
         # 텍스트 추가 버튼
         text_action = QAction(QIcon("assets/text_icon.svg"), "Text", self)
         text_action.setToolTip("Add text")
-        toolbar.addAction(text_action)
+        self.toolbar.addAction(text_action)
         
         # 펜 도구 버튼
         pen_action = QAction(QIcon("assets/pen_icon.svg"), "Pen", self)
         pen_action.setToolTip("Draw with pen")
-        toolbar.addAction(pen_action)
+        self.toolbar.addAction(pen_action)
         
         # 강조 도구 버튼
         highlight_action = QAction(QIcon("assets/highlight_icon.svg"), "Highlight", self)
         highlight_action.setToolTip("Highlight area")
-        toolbar.addAction(highlight_action)
+        self.toolbar.addAction(highlight_action)
         
         # 도형 버튼 - 사각형
         rect_action = QAction(QIcon("assets/rectangle_icon.svg"), "Rectangle", self)
         rect_action.setToolTip("Draw rectangle")
-        toolbar.addAction(rect_action)
+        self.toolbar.addAction(rect_action)
         
         # 도형 버튼 - 원
         circle_action = QAction(QIcon("assets/circle_icon.svg"), "Circle", self)
         circle_action.setToolTip("Draw circle")
-        toolbar.addAction(circle_action)
+        self.toolbar.addAction(circle_action)
         
         # 화살표 버튼 (원 버튼 다음으로 이동)
         arrow_action = QAction(QIcon("assets/arrow_icon.svg"), "Arrow", self)
         arrow_action.setToolTip("Draw arrow (Select color and thickness)") # 툴팁 수정
         arrow_action.triggered.connect(self.activate_arrow_tool)
-        toolbar.addAction(arrow_action)
+        self.toolbar.addAction(arrow_action)
         
         # 모자이크 버튼 (QToolButton + QMenu)
         mosaic_button = QToolButton(self)
@@ -428,7 +429,7 @@ class ImageEditor(QMainWindow):
         strong_action.triggered.connect(lambda: self.set_mosaic_tool('Strong'))
         mosaic_menu.addAction(strong_action)
         
-        toolbar.addWidget(mosaic_button) # 툴바에 버튼 위젯 추가
+        self.toolbar.addWidget(mosaic_button) # 툴바에 버튼 위젯 추가
 
     def set_mosaic_tool(self, level):
         """모자이크 도구 활성화 및 레벨 설정"""
