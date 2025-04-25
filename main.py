@@ -5,6 +5,9 @@ from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt
 import ctypes
 
+# 로깅 설정 가져오기
+from log_setup import setup_logging
+
 # 유틸리티 함수 가져오기
 from utils import get_resource_path
 
@@ -14,6 +17,9 @@ from gui_module import CaptureUI
 from config_module import ConfigManager
 
 def main():
+    # 로깅 설정 적용
+    setup_logging()
+
     # High DPI 스케일링 활성화
     # QApplication 인스턴스 생성 전에 설정해야 합니다.
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
