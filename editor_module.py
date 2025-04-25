@@ -39,6 +39,10 @@ class ImageEditor(QMainWindow):
         self.selection_end_point = None
         self.is_adding_text = False # 텍스트 추가 상태 플래그
         self.crop_rect_widget = None # 자르기 영역 위젯 좌표 (QRect)
+        self.selection_rect_widget = None # 새 선택 도구 영역 위젯 좌표 (QRect)
+        self.selected_content_pixmap = None # 띄어낸 이미지 콘텐츠 (QPixmap)
+        self.selected_content_rect_widget = None # 띄어낸 콘텐츠의 현재 위치/크기 (QRect)
+        self.is_selection_active = False # 콘텐츠가 띄어진 활성 상태인지 여부
         
         # 화살표 색상/두께 변수
         self.arrow_color = QColor(Qt.red) 
@@ -208,9 +212,10 @@ class ImageEditor(QMainWindow):
 
         # 그리기 도구 버튼들
         
-        # 도구 선택 버튼
+        # 도구 선택 버튼 (activate_select_tool 연결)
         select_action = QAction(QIcon("assets/select_icon.svg"), "Select", self)
         select_action.setToolTip("Select area")
+        select_action.triggered.connect(self.activate_select_tool) # 시그널 연결
         self.toolbar.addAction(select_action)
         
         # 자르기 버튼 (activate_crop_tool 연결)
@@ -500,6 +505,20 @@ class ImageEditor(QMainWindow):
             self.image_canvas.setCursor(Qt.ArrowCursor)
             self.is_adding_text = False
 
+    def activate_select_tool(self):
+        """선택 도구 활성화"""
+        print("[DEBUG] activate_select_tool called")
+        self.current_tool = 'select'
+        self.is_selecting = False # 영역 드래그 상태 초기화
+        self.is_adding_text = False
+        self.crop_rect_widget = None
+        self.selection_rect_widget = None # 선택 영역 표시 초기화
+        self.reset_selection_state() # 이전 활성 선택 초기화
+        # is_selecting 플래그는 영역 드래그 시 ImageCanvas에서 True로 설정됨
+        self.image_canvas.setCursor(Qt.CrossCursor) # 선택 커서
+        print("Select tool activated.")
+        self.image_canvas.update() # 이전 상태 지우기
+
     def activate_crop_tool(self):
         """자르기 도구 활성화"""
         print("[DEBUG] activate_crop_tool called")
@@ -548,6 +567,7 @@ class ImageEditor(QMainWindow):
             self.image_canvas.setCursor(Qt.ArrowCursor) # 핸들 위에서 커서 변경 예정
             self.is_selecting = False
             self.is_adding_text = False
+            self.reset_selection_state() # 선택 활성 상태 초기화
             self.image_canvas.update() # 오버레이 표시
             print("[DEBUG] Crop overlay update requested.")
         except Exception as e:
@@ -609,6 +629,7 @@ class ImageEditor(QMainWindow):
             self.reset_tool_state()
             print("[DEBUG] Calling update_undo_redo_actions after apply_crop")
             self.update_undo_redo_actions()
+            self.reset_selection_state() # 자르기 후 선택 상태 초기화
         except Exception as e:
             print(f"[ERROR] Exception in apply_crop outer block: {e}")
             traceback.print_exc()
@@ -658,6 +679,10 @@ class ImageEditor(QMainWindow):
             if self.current_tool == 'crop' and event.key() in (Qt.Key_Return, Qt.Key_Enter):
                 print("[DEBUG] Enter key pressed in crop mode.")
                 self.apply_crop()
+            # 활성 선택 상태에서 Enter 키 입력 시 병합
+            elif self.is_selection_active and event.key() in (Qt.Key_Return, Qt.Key_Enter):
+                 print("[DEBUG] Enter key pressed with active selection. Merging...")
+                 self.merge_selection()
             else:
                 super().keyPressEvent(event) # 다른 키 이벤트는 기본 처리
         except Exception as e:
@@ -855,6 +880,104 @@ class ImageEditor(QMainWindow):
 
         painter.end()
         print(f"[DrawText] Finished drawing text.")
+
+    def lift_selection(self, widget_rect):
+        """주어진 위젯 영역의 이미지를 띄어내어 활성 선택 상태로 만듦"""
+        if not widget_rect or not widget_rect.isValid() or not self.edited_image:
+            print("[LiftSelection] Invalid widget rectangle or no image.")
+            return
+            
+        print(f"[LiftSelection] Attempting to lift from widget rect: {widget_rect}")
+        img_rect = self.map_widget_rect_to_image_rect(widget_rect)
+        
+        if not img_rect or not img_rect.isValid():
+            print("[LiftSelection] Failed to map widget rect to image rect.")
+            return
+            
+        # 이미지 경계와 교차하는 유효한 영역만 사용
+        valid_img_rect = img_rect.intersected(self.edited_image.rect())
+        if not valid_img_rect.isValid() or valid_img_rect.width() <= 0 or valid_img_rect.height() <= 0:
+            print("[LiftSelection] Selection rectangle is outside image bounds or invalid.")
+            return
+
+        print(f"[LiftSelection] Copying image data from: {valid_img_rect}")
+        try:
+            self.push_undo_state() # 띄어내기 전 상태 저장
+            # QPixmap으로 복사 (투명 배경 지원 위해)
+            copied_image = self.edited_image.copy(valid_img_rect)
+            self.selected_content_pixmap = QPixmap.fromImage(copied_image)
+            
+            # 원본 이미지에서 해당 영역 비우기 (선택적 - 여기서는 투명 처리 시도)
+            painter = QPainter(self.edited_image)
+            painter.setCompositionMode(QPainter.CompositionMode_Clear)
+            painter.fillRect(valid_img_rect, Qt.transparent)
+            painter.end()
+            
+            self.selected_content_rect_widget = widget_rect # 위젯 좌표 기준 사각형 저장
+            self.is_selection_active = True # 활성 선택 상태로 전환
+            self.selection_rect_widget = None # 영역 선택 표시는 제거
+            self.current_tool = 'select_transform' # 이동/변형 모드로 전환 (가칭)
+            self.image_canvas.setCursor(Qt.ArrowCursor) # 기본 커서 (핸들 위에서 변경됨)
+            self.update_canvas() # 캔버스 업데이트 (띄어진 이미지 표시)
+            print(f"[LiftSelection] Selection lifted successfully. Content rect: {self.selected_content_rect_widget}")
+
+        except Exception as e:
+            print(f"[LiftSelection] Error during lifting selection: {e}")
+            traceback.print_exc()
+            if self.undo_stack: self.undo_stack.pop() # 에러 시 undo 복구 시도
+            self.reset_selection_state()
+            self.current_tool = None # 도구 초기화
+            
+    def reset_selection_state(self):
+        """활성 선택 상태 관련 변수 초기화"""
+        self.is_selection_active = False
+        self.selected_content_pixmap = None
+        self.selected_content_rect_widget = None
+        # self.selection_rect_widget = None # 필요시 추가
+        print("[DEBUG] Selection state reset.")
+            
+    def reset_tool_state(self):
+        """현재 도구 상태 초기화 (자르기 완료/취소 후)"""
+        self.current_tool = None
+        self.crop_rect_widget = None
+        self.image_canvas.setCursor(Qt.ArrowCursor)
+        self.image_canvas.dragging_handle = ImageCanvas.NO_HANDLE
+        self.image_canvas.update()
+
+    def merge_selection(self):
+        """활성화된 선택 콘텐츠를 주 이미지에 병합"""
+        if not self.is_selection_active or not self.selected_content_pixmap or not self.selected_content_rect_widget:
+            print("[MergeSelection] No active selection to merge.")
+            return
+            
+        print(f"[MergeSelection] Merging selection at widget rect: {self.selected_content_rect_widget}")
+        # 위젯 좌표계의 사각형을 이미지 좌표계로 변환해야 함
+        img_target_rect = self.map_widget_rect_to_image_rect(self.selected_content_rect_widget)
+        
+        if not img_target_rect or not img_target_rect.isValid():
+            print("[MergeSelection] Failed to map target rectangle to image coordinates.")
+            # 병합 실패 시, 선택 상태는 유지할지 초기화할지 결정 필요
+            # self.reset_selection_state() # 예: 실패 시 초기화
+            return
+            
+        try:
+            self.push_undo_state() # 병합 전 상태 저장
+            painter = QPainter(self.edited_image)
+            # QPixmap을 QRect에 맞춰 그림 (source rect는 QPixmap 전체)
+            painter.drawPixmap(img_target_rect, self.selected_content_pixmap, self.selected_content_pixmap.rect())
+            painter.end()
+            print("[MergeSelection] Selection merged successfully.")
+            self.update_canvas()
+            self.update_undo_redo_actions()
+            
+        except Exception as e:
+            print(f"[MergeSelection] Error during merging: {e}")
+            traceback.print_exc()
+            if self.undo_stack: self.undo_stack.pop() # 에러 시 undo 복구
+            
+        # 병합 성공/실패 여부와 관계없이 선택 상태는 초기화
+        self.reset_selection_state()
+        self.current_tool = None # 도구 선택도 초기화
 
 # 테스트 코드 (독립 실행용)
 if __name__ == "__main__":

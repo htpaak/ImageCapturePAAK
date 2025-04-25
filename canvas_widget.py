@@ -168,13 +168,33 @@ class ImageCanvas(QWidget):
                 preview_rect_widget = QRect(start_pt, end_pt).normalized()
                 painter.drawRect(preview_rect_widget)
 
+        # 선택 도구 영역 표시 (elif -> if 로 변경하여 다른 미리보기와 중첩 가능하게)
+        if self.editor.current_tool == 'select' and self.editor.selection_rect_widget:
+             pen = QPen(Qt.white, 1, Qt.DashLine) # 흰색 점선
+             painter.setPen(pen)
+             painter.setBrush(Qt.NoBrush)
+             painter.drawRect(self.editor.selection_rect_widget)
+
+        # 띄어낸 선택 콘텐츠 그리기
+        elif self.editor.is_selection_active and self.editor.selected_content_pixmap and self.editor.selected_content_rect_widget:
+            # Pixmap 그리기
+            painter.drawPixmap(self.editor.selected_content_rect_widget, self.editor.selected_content_pixmap)
+            # 핸들 그리기 (draw_crop_overlay와 유사하게)
+            painter.setPen(QPen(Qt.black, 1, Qt.SolidLine)) # 검은색 실선 테두리
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRect(self.editor.selected_content_rect_widget)
+            painter.setPen(Qt.white)
+            painter.setBrush(Qt.white)
+            for handle_rect in self.get_handle_rects(self.editor.selected_content_rect_widget).values():
+                painter.drawEllipse(handle_rect)
+
     def mousePressEvent(self, event):
         print("[Canvas] mousePressEvent received")
         tool = self.editor.current_tool
         
         # 자르기 도구 핸들링
         if tool == 'crop' and event.button() == Qt.LeftButton:
-            handle = self.get_handle_at(event.pos())
+            handle = self.get_handle_at(event.pos(), self.editor.crop_rect_widget)
             if handle != self.NO_HANDLE:
                 self.dragging_handle = handle
                 self.drag_start_pos = event.pos()
@@ -227,6 +247,35 @@ class ImageCanvas(QWidget):
              print(f"[Canvas] State after press: is_selecting={self.editor.is_selecting}, tool={self.editor.current_tool}")
              event.accept()
              return
+
+        # 선택 도구 처리 (elif -> if 로 변경, event.accept() 위치 조정)
+        if tool == 'select' and event.button() == Qt.LeftButton:
+            print(f"[DEBUG] mousePressEvent: Select tool active")
+            self.editor.is_selecting = True # 영역 선택 시작 플래그
+            self.editor.selection_start_point = event.pos()
+            self.editor.selection_end_point = event.pos()
+            self.editor.selection_rect_widget = None # 드래그 시작 시 기존 영역 초기화
+            print(f"[Select] Started selection at {self.editor.selection_start_point}")
+            event.accept() # 여기서 이벤트 처리됨을 명시
+
+        # 활성 선택 영역 핸들/이동 처리
+        elif self.editor.is_selection_active and event.button() == Qt.LeftButton:
+            handle = self.get_handle_at(event.pos(), self.editor.selected_content_rect_widget) # 대상 rect 전달
+            if handle != self.NO_HANDLE:
+                self.dragging_handle = handle
+                self.drag_start_pos = event.pos()
+                self.drag_start_rect = QRect(self.editor.selected_content_rect_widget) # 값 복사
+                print(f"[SelectTransform] Started dragging handle: {self.dragging_handle} from {self.drag_start_pos} with rect {self.drag_start_rect}")
+                event.accept() 
+                return
+            else:
+                print("[SelectTransform] Clicked outside active selection.")
+                # 여기서 선택 해제 로직 추가 가능 (예: Enter 대신)
+                # self.editor.merge_selection() # 가상의 병합 함수 호출
+                # self.editor.reset_selection_state()
+                # self.update()
+                # event.accept()
+                # return
 
         super().mousePressEvent(event) 
 
@@ -283,12 +332,12 @@ class ImageCanvas(QWidget):
             # if valid_rect.bottom() > widget_bounds.bottom(): valid_rect.setBottom(widget_bounds.bottom())
 
             self.editor.crop_rect_widget = valid_rect
-            self.update_cursor(pos) 
+            self.update_cursor(pos, self.editor.crop_rect_widget) 
             self.update() 
             event.accept()
             return
         elif self.editor.current_tool == 'crop':
-            self.update_cursor(pos)
+            self.update_cursor(pos, self.editor.crop_rect_widget)
             
         elif self.editor.is_selecting and self.editor.current_tool in ['mosaic', 'arrow', 'circle', 'rectangle', 'highlight', 'pen']:
              if self.editor.current_tool == 'highlight':
@@ -320,6 +369,76 @@ class ImageCanvas(QWidget):
              event.accept()
              return
 
+        # 활성 선택 영역 핸들/이동 드래그 처리
+        elif self.editor.is_selection_active and self.dragging_handle != self.NO_HANDLE:
+            if not self.drag_start_pos or not self.drag_start_rect:
+                 print("[WARN] Dragging active selection without start info.")
+                 self.dragging_handle = self.NO_HANDLE 
+                 return
+                 
+            delta = pos - self.drag_start_pos
+            new_rect = QRect(self.drag_start_rect) 
+            min_size = 10 # 최소 크기 (픽셀맵 왜곡 방지 위해 중요)
+
+            # 핸들 유형에 따라 사각형 조절
+            if self.dragging_handle == self.MOVE_RECT:
+                new_rect.translate(delta)
+            elif self.dragging_handle == self.TOP_LEFT:
+                new_rect.setTopLeft(self.drag_start_rect.topLeft() + delta)
+            elif self.dragging_handle == self.TOP_MIDDLE:
+                new_rect.setTop(self.drag_start_rect.top() + delta.y())
+            elif self.dragging_handle == self.TOP_RIGHT:
+                new_rect.setTopRight(self.drag_start_rect.topRight() + delta)
+            elif self.dragging_handle == self.MIDDLE_LEFT:
+                new_rect.setLeft(self.drag_start_rect.left() + delta.x())
+            elif self.dragging_handle == self.MIDDLE_RIGHT:
+                new_rect.setRight(self.drag_start_rect.right() + delta.x())
+            elif self.dragging_handle == self.BOTTOM_LEFT:
+                new_rect.setBottomLeft(self.drag_start_rect.bottomLeft() + delta)
+            elif self.dragging_handle == self.BOTTOM_MIDDLE:
+                new_rect.setBottom(self.drag_start_rect.bottom() + delta.y())
+            elif self.dragging_handle == self.BOTTOM_RIGHT:
+                new_rect.setBottomRight(self.drag_start_rect.bottomRight() + delta)
+
+            valid_rect = new_rect.normalized()
+            # 크기 조절 시 최소 크기 유지
+            if self.dragging_handle != self.MOVE_RECT: # 이동 시에는 크기 변경 없음
+                if valid_rect.width() < min_size:
+                    if self.dragging_handle in [self.TOP_LEFT, self.MIDDLE_LEFT, self.BOTTOM_LEFT]:
+                        valid_rect.setLeft(valid_rect.right() - min_size)
+                    else:
+                        valid_rect.setRight(valid_rect.left() + min_size)
+                if valid_rect.height() < min_size:
+                    if self.dragging_handle in [self.TOP_LEFT, self.TOP_MIDDLE, self.TOP_RIGHT]:
+                        valid_rect.setTop(valid_rect.bottom() - min_size)
+                    else:
+                        valid_rect.setBottom(valid_rect.top() + min_size)
+            
+            self.editor.selected_content_rect_widget = valid_rect
+            self.update_cursor(pos, self.editor.selected_content_rect_widget) # 대상 rect 전달
+            self.update() 
+            event.accept()
+            return
+            
+        # 선택 도구 영역 업데이트 (elif -> if)
+        if self.editor.current_tool == 'select' and self.editor.is_selecting:
+            self.editor.selection_end_point = event.pos()
+            # 실시간으로 selection_rect_widget 업데이트 (paintEvent에서 사용)
+            start = self.editor.selection_start_point
+            end = self.editor.selection_end_point
+            if start and end:
+                 # 드래그 중에도 사각형이 그려지도록 최소 크기(예: 1x1) 설정
+                 self.editor.selection_rect_widget = QRect(start, end).normalized()
+                 if not self.editor.selection_rect_widget.isValid():
+                      # 아주 짧게 드래그 시 유효하지 않을 수 있음
+                      self.editor.selection_rect_widget = QRect(start.x(), start.y(), 1, 1)
+            else:
+                self.editor.selection_rect_widget = None # 시작/끝점 없으면 영역 없음
+                
+            self.update() # 캔버스 다시 그리기 (점선 표시)
+            event.accept()
+            return
+
         super().mouseMoveEvent(event) 
 
     def mouseReleaseEvent(self, event):
@@ -330,7 +449,7 @@ class ImageCanvas(QWidget):
             self.dragging_handle = self.NO_HANDLE
             self.drag_start_pos = None
             self.drag_start_rect = None
-            self.update_cursor(event.pos()) 
+            self.update_cursor(event.pos(), self.editor.crop_rect_widget) 
             event.accept()
             return
             
@@ -416,17 +535,66 @@ class ImageCanvas(QWidget):
              event.accept()
              return
 
+        # 선택 도구 종료 및 lift 호출
+        elif self.editor.current_tool == 'select' and self.editor.is_selecting:
+            final_rect = None
+            start = self.editor.selection_start_point
+            end = self.editor.selection_end_point
+            if start and end and start != end: # 클릭만 한 경우는 제외
+                 final_rect = QRect(start, end).normalized()
+                 print(f"[Select] Final selection rect confirmed: {final_rect}")
+                 # Lift 함수 호출
+                 self.editor.lift_selection(final_rect)
+                 # lift_selection 내부에서 is_selection_active = True, current_tool 변경, update_canvas 호출함
+            else:
+                 print("[Select] Selection cancelled or too small.")
+                 self.editor.selection_rect_widget = None # 영역 표시 제거
+                 self.update()
+                 
+            self.editor.is_selecting = False # 영역 드래그 상태 해제
+            # selection_start/end_point는 여기서 초기화하지 않음 (lift에서 사용 가능성)
+            self.setCursor(Qt.ArrowCursor) # 커서 원래대로
+            event.accept()
+            return
+
+        # 활성 선택 영역 드래그 종료 처리
+        elif self.editor.is_selection_active and self.dragging_handle != self.NO_HANDLE:
+            print(f"[SelectTransform] Finished dragging handle: {self.dragging_handle}. Final rect: {self.editor.selected_content_rect_widget}")
+            # 여기서 Pixmap을 실제로 리사이즈할 수도 있음 (선택적)
+            # pixmap = self.editor.selected_content_pixmap
+            # scaled_pixmap = pixmap.scaled(self.editor.selected_content_rect_widget.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            # self.editor.selected_content_pixmap = scaled_pixmap
+            # self.editor.selected_content_rect_widget.setSize(scaled_pixmap.size()) # 사이즈 동기화
+            
+            self.dragging_handle = self.NO_HANDLE
+            self.drag_start_pos = None
+            self.drag_start_rect = None
+            self.update_cursor(event.pos(), self.editor.selected_content_rect_widget) # 대상 rect 전달
+            event.accept()
+            return
+
         super().mouseReleaseEvent(event) 
         
-    def update_cursor(self, pos):
-        """마우스 위치에 따라 커서 모양 업데이트 (자르기 모드)"""
-        if self.editor.current_tool != 'crop':
-             # 핸들 드래그 중이 아닐 때만 기본 커서로 변경
-             if self.dragging_handle == self.NO_HANDLE: 
-                 self.setCursor(Qt.ArrowCursor) 
+    def update_cursor(self, pos, target_rect):
+        """마우스 위치와 대상 사각형에 따라 커서 모양 업데이트"""
+        # 활성 선택 상태에서는 항상 기본 커서 사용
+        if self.editor.is_selection_active:
+            self.setCursor(Qt.ArrowCursor)
+            return
+            
+        # 이하 코드는 is_selection_active가 False일 때만 실행됨 (주로 Crop 모드)
+        # if self.editor.current_tool not in ['crop', 'select_transform']:
+        #      if self.dragging_handle == self.NO_HANDLE: 
+        #          self.setCursor(Qt.ArrowCursor) 
+        #      return
+        # 위 로직은 is_selection_active나 current_tool 검사로 대체 가능
+
+        if not target_rect:
+             if self.dragging_handle == self.NO_HANDLE:
+                 self.setCursor(Qt.ArrowCursor) # 대상 rect 없으면 기본 커서
              return
 
-        handle = self.get_handle_at(pos)
+        handle = self.get_handle_at(pos, target_rect) # 대상 rect 전달
         
         if handle == self.TOP_LEFT or handle == self.BOTTOM_RIGHT:
             self.setCursor(Qt.SizeFDiagCursor)
@@ -546,11 +714,11 @@ class ImageCanvas(QWidget):
         else:
             print("[DEBUG] finish_text_input called but text_input is None or not visible.")
 
-    def get_handle_at(self, pos): 
-        """주어진 위치에 어떤 핸들이 있는지 확인"""
-        if not self.editor.crop_rect_widget: return self.NO_HANDLE
+    def get_handle_at(self, pos, rect): 
+        """주어진 위치가 주어진 사각형(rect)의 어떤 핸들 위에 있는지 확인"""
+        if not rect: return self.NO_HANDLE # 대상 사각형 없으면 핸들 없음
 
-        r = self.editor.crop_rect_widget
+        r = rect # 인자로 받은 사각형 사용
         handles = self.get_handle_rects(r)
 
         if handles[self.TOP_LEFT].contains(pos): return self.TOP_LEFT
