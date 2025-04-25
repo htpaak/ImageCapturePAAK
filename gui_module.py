@@ -859,25 +859,29 @@ class CaptureUI(QMainWindow):
     # --- edit_image 메서드 추가 ---
     def edit_image(self, image_path):
         """선택된 이미지를 편집기에 엽니다."""
-        print(f"[GUI DEBUG] edit_image called with path: {image_path}") # 로그 메시지 수정
+        print(f"[GUI DEBUG] edit_image called with path: {image_path}")
         if image_path:
             try:
-                self.hide() # 메인 창 숨기기
-                # ImageEditor 인스턴스 생성
-                self.editor = ImageEditor(image_path, parent=self)
+                # ImageEditor 인스턴스 생성 (parent=None)
+                self.editor = ImageEditor(image_path, parent=None)
                 # 편집기가 닫힐 때 메인 창을 다시 표시하도록 closed 시그널 연결
                 self.editor.closed.connect(self.show)
                 # 편집기에서 이미지가 저장될 때 handle_image_saved 슬롯 호출하도록 연결
                 self.editor.imageSaved.connect(self.handle_image_saved)
-                # 편집기 창 표시
+                
+                # 편집기 창을 먼저 표시
                 self.editor.show()
+                # 그 다음 메인 창 숨기기
+                self.hide()
+
             except Exception as e:
-                print(f"[GUI Error] Failed to open ImageEditor: {e}") # 로그 메시지 수정
+                print(f"[GUI Error] Failed to open ImageEditor: {e}")
                 traceback.print_exc()
-                self.show() # 에디터 열기 실패 시 다시 메인 창 표시
+                # 에디터 열기 실패 시 다시 메인 창 표시
+                self.show()
                 QMessageBox.warning(self, "Editor Error", f"Failed to open image editor: {e}")
         else:
-            print("[GUI Warning] No image path provided to edit_image") # 로그 메시지 수정
+            print("[GUI Warning] No image path provided to edit_image")
 
     # --- update_thumbnail 메서드 추가 (기능은 추후 구현) ---
     def update_thumbnail(self, image_path):
