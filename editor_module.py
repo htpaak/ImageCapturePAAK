@@ -201,11 +201,13 @@ class ImageEditor(QMainWindow):
         # 좌우 반전 버튼
         flip_h_action = QAction(QIcon("assets/flip_h_icon.svg"), "Flip H", self)
         flip_h_action.setToolTip("Flip horizontally")
+        flip_h_action.triggered.connect(self.flip_horizontally) # 시그널 연결
         self.toolbar.addAction(flip_h_action)
         
         # 상하 반전 버튼
         flip_v_action = QAction(QIcon("assets/flip_v_icon.svg"), "Flip V", self)
         flip_v_action.setToolTip("Flip vertically")
+        flip_v_action.triggered.connect(self.flip_vertically) # 시그널 연결
         self.toolbar.addAction(flip_v_action)
 
         self.toolbar.addSeparator()
@@ -881,6 +883,46 @@ class ImageEditor(QMainWindow):
         painter.end()
         print(f"[DrawText] Finished drawing text.")
 
+    def flip_horizontally(self):
+        """이미지를 수평으로 뒤집습니다."""
+        if not self.edited_image or self.edited_image.isNull():
+            print("[FlipH] No image to flip.")
+            return
+        
+        try:
+            print("[FlipH] Flipping horizontally...")
+            self.push_undo_state() # 뒤집기 전 상태 저장
+            self.edited_image = self.edited_image.mirrored(True, False)
+            self.update_canvas()
+            self.update_undo_redo_actions()
+            # 오버레이 재설정 (선택적이지만 안전함)
+            self.initialize_overlay() 
+            print("[FlipH] Horizontal flip successful.")
+        except Exception as e:
+            print(f"[FlipH] Error during horizontal flip: {e}")
+            traceback.print_exc()
+            if self.undo_stack: self.undo_stack.pop() # 에러 시 undo 복구
+
+    def flip_vertically(self):
+        """이미지를 수직으로 뒤집습니다."""
+        if not self.edited_image or self.edited_image.isNull():
+            print("[FlipV] No image to flip.")
+            return
+            
+        try:
+            print("[FlipV] Flipping vertically...")
+            self.push_undo_state() # 뒤집기 전 상태 저장
+            self.edited_image = self.edited_image.mirrored(False, True)
+            self.update_canvas()
+            self.update_undo_redo_actions()
+            # 오버레이 재설정
+            self.initialize_overlay()
+            print("[FlipV] Vertical flip successful.")
+        except Exception as e:
+            print(f"[FlipV] Error during vertical flip: {e}")
+            traceback.print_exc()
+            if self.undo_stack: self.undo_stack.pop() # 에러 시 undo 복구
+
     def lift_selection(self, widget_rect):
         """주어진 위젯 영역의 이미지를 띄어내어 활성 선택 상태로 만듦"""
         if not widget_rect or not widget_rect.isValid() or not self.edited_image:
@@ -924,7 +966,7 @@ class ImageEditor(QMainWindow):
         except Exception as e:
             print(f"[LiftSelection] Error during lifting selection: {e}")
             traceback.print_exc()
-            if self.undo_stack: self.undo_stack.pop() # 에러 시 undo 복구 시도
+            if self.undo_stack: self.undo_stack.pop() # 에러 시 undo 복구
             self.reset_selection_state()
             self.current_tool = None # 도구 초기화
             
