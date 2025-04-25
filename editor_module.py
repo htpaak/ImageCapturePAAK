@@ -2,8 +2,8 @@ import os
 import sys
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QLabel, QAction, 
                             QToolBar, QFileDialog, QMessageBox, QApplication, QDesktopWidget, 
-                            QToolButton, QMenu, QColorDialog, QComboBox)
-from PyQt5.QtGui import QPixmap, QImage, QIcon, QPainter, QPen, QColor, QPolygonF, QBrush
+                            QToolButton, QMenu, QColorDialog, QComboBox, QLineEdit)
+from PyQt5.QtGui import QPixmap, QImage, QIcon, QPainter, QPen, QColor, QPolygonF, QBrush, QFont, QFontMetrics
 from PyQt5.QtCore import Qt, QSize, QRect, QPoint, QRectF, QSizeF, QLineF, QPointF
 import math
 # 사용자 정의 색상 선택기 import
@@ -15,6 +15,7 @@ class ImageCanvas(QWidget):
         super().__init__(parent)
         self.editor = editor
         self.image = None
+        self.text_input = None # 텍스트 입력 위젯 참조 추가
         
         # 배경 설정
         self.setStyleSheet("background-color: #282828;")
@@ -188,6 +189,9 @@ class ImageCanvas(QWidget):
                 self.editor.selection_start_point = event.pos()
                 self.editor.selection_end_point = event.pos()
             print(f"[Canvas] State after press: is_selecting={self.editor.is_selecting}, tool={self.editor.current_tool}")
+        elif tool == 'text' and event.button() == Qt.LeftButton and self.editor.is_adding_text:
+            self.create_text_input(event.pos())
+            self.editor.is_adding_text = False # 한 번 클릭으로 입력 상자 생성 후 비활성화
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -236,6 +240,12 @@ class ImageCanvas(QWidget):
 
     def mouseReleaseEvent(self, event):
         print("[Canvas] mouseReleaseEvent received")
+        # 텍스트 입력 중에는 release 이벤트 무시 (입력 완료는 QLineEdit에서 처리)
+        if self.editor.current_tool == 'text' and self.text_input and self.text_input.isVisible():
+             print("[Canvas] Mouse release ignored during text input.")
+             super().mouseReleaseEvent(event)
+             return
+
         if self.editor.is_selecting and event.button() == Qt.LeftButton and self.editor.current_tool in ['mosaic', 'arrow', 'circle', 'rectangle', 'highlight', 'pen']:
             tool = self.editor.current_tool
             self.editor.is_selecting = False # 여기서 플래그 해제
@@ -325,12 +335,137 @@ class ImageCanvas(QWidget):
 
         super().mouseReleaseEvent(event)
 
+    def create_text_input(self, position):
+        """지정된 위치에 QLineEdit 생성 및 표시"""
+        if self.text_input is None:
+            self.text_input = QLineEdit(self)
+            self.text_input.returnPressed.connect(self.finish_text_input) # Enter 키 연결
+            # 포커스 아웃 시에도 입력 완료 처리 (선택적)
+            # self.text_input.editingFinished.connect(self.finish_text_input) 
+
+        # 이전 입력 내용 클리어
+        self.text_input.clear()
+
+        # 폰트 설정 (에디터에서 가져옴)
+        font = QFont()
+        font.setPixelSize(self.editor.text_font_size) # 픽셀 크기로 설정
+        self.text_input.setFont(font)
+        print(f"[DEBUG] Setting QLineEdit font size to {self.editor.text_font_size} pixels.") # 로그 추가
+
+        # 스타일 설정 (색상, 배경 등)
+        text_color = self.editor.text_color.name()
+        # 배경을 투명하게 설정하고 테두리 색상을 텍스트 색상과 동일하게 설정
+        self.text_input.setStyleSheet(f"""
+            QLineEdit {{
+                color: {text_color};
+                background-color: transparent; /* 배경 투명 */
+                border: 1px solid {text_color}; /* 테두리 색상 변경 */
+                padding: 2px;
+            }}
+        """)
+
+        # 크기 자동 조절 및 위치 설정
+        self.text_input.adjustSize() # 내용에 맞게 크기 조절 시도
+        # 클릭 위치를 입력 상자의 좌상단 기준으로 설정
+        input_pos = position 
+        # 캔버스 경계 밖으로 나가지 않도록 조정
+        input_pos.setX(max(0, min(input_pos.x(), self.width() - self.text_input.width())))
+        input_pos.setY(max(0, min(input_pos.y(), self.height() - self.text_input.height())))
+        self.text_input.move(input_pos)
+
+        self.text_input.show()
+        self.text_input.setFocus()
+        print(f"[Canvas] Text input created at {input_pos} with font size {self.editor.text_font_size}")
+
+    def finish_text_input(self):
+        """텍스트 입력 완료 처리"""
+        print("[DEBUG] finish_text_input called")
+        if self.text_input and self.text_input.isVisible():
+            try:
+                text = self.text_input.text()
+                position = self.text_input.pos() # 위젯 좌표
+                print(f"[DEBUG] Text input finished. Raw Text: '{text}', Widget Position: {position}")
+                
+                self.text_input.hide()
+                print("[DEBUG] Text input hidden.")
+
+                if text:
+                    print("[DEBUG] Text is not empty. Proceeding to draw.")
+                    # 위젯 좌표를 이미지 좌표로 변환
+                    # 텍스트 박스의 좌상단 좌표를 사용
+                    print(f"[DEBUG] Calling map_widget_to_image with position: {position}")
+                    img_position = self.map_widget_to_image(position)
+                    print(f"[DEBUG] map_widget_to_image returned: {img_position}")
+                    
+                    if img_position:
+                        print(f"[Canvas] Finishing text input. Text: '{text}', Image Pos: {img_position}")
+                        
+                        # 위젯 폰트 크기를 이미지 픽셀 크기로 변환
+                        widget_font_size = self.editor.text_font_size
+                        print(f"[DEBUG] Widget font size: {widget_font_size}")
+                        # 같은 X 좌표에서 Y만 폰트 크기만큼 떨어진 점을 매핑
+                        p1_widget = position
+                        p2_widget = QPoint(position.x(), position.y() + widget_font_size)
+                        p1_image = img_position # 이미 계산된 값 사용
+                        print(f"[DEBUG] Mapping widget point p2: {p2_widget}")
+                        p2_image = self.map_widget_to_image(p2_widget)
+                        print(f"[DEBUG] Mapped image point p2: {p2_image}")
+                        
+                        image_font_size = widget_font_size # 기본값
+                        if p1_image and p2_image:
+                            delta_y = abs(p2_image.y() - p1_image.y())
+                            if delta_y > 0: # 유효한 높이 차이
+                                image_font_size = delta_y
+                        print(f"[DEBUG] Calculated image font size: {image_font_size}")
+                        
+                        print("[DEBUG] Calling push_undo_state")
+                        self.editor.push_undo_state() # Undo 상태 저장
+                        print("[DEBUG] push_undo_state finished")
+                        
+                        # 이미지에 텍스트 그리기 호출 (계산된 이미지 폰트 크기 전달)
+                        print(f"[DEBUG] Calling draw_text with img_position={img_position}, text='{text}', color={self.editor.text_color.name()}, size={image_font_size}")
+                        self.editor.draw_text(img_position, text, self.editor.text_color, image_font_size)
+                        print("[DEBUG] draw_text finished")
+                        
+                        print("[DEBUG] Calling update_canvas")
+                        self.editor.update_canvas()
+                        print("[DEBUG] update_canvas finished")
+                    else:
+                        print("[Canvas] Failed to map widget position to image position.")
+                else:
+                    print("[Canvas] Text input cancelled (empty text).")
+
+                # 도구 및 커서 초기화
+                print("[DEBUG] Resetting current tool and cursor.")
+                self.editor.current_tool = None
+                self.setCursor(Qt.ArrowCursor)
+                print("[DEBUG] Updating undo/redo actions.")
+                self.editor.update_undo_redo_actions()
+                print("[DEBUG] finish_text_input completed successfully.")
+
+            except Exception as e:
+                print(f"[ERROR] Exception occurred in finish_text_input: {e}")
+                import traceback
+                traceback.print_exc() # 콘솔에 상세 스택 트레이스 출력
+                # 에러 발생 시에도 커서 등은 초기화 시도
+                try:
+                    self.text_input.hide()
+                    self.editor.current_tool = None
+                    self.setCursor(Qt.ArrowCursor)
+                except Exception as inner_e:
+                    print(f"[ERROR] Exception during error handling in finish_text_input: {inner_e}")
+        else:
+            print("[DEBUG] finish_text_input called but text_input is None or not visible.")
+
 class ImageEditor(QMainWindow):
     """이미지 편집 기능을 제공하는 창"""
     # 모자이크 레벨 상수 정의
     MOSAIC_LEVELS = {'Weak': 5, 'Medium': 10, 'Strong': 20}
     # 기본 화살표 두께 옵션
     # ARROW_THICKNESS_OPTIONS = ["1px", "2px", "3px", "5px", "8px"] 
+    # 기본 폰트 크기 (두께 대신 사용)
+    DEFAULT_FONT_SIZE = 12
+    MAX_FONT_SIZE = 72
 
     def __init__(self, image_path=None, parent=None):
         super().__init__(parent)
@@ -347,6 +482,7 @@ class ImageEditor(QMainWindow):
         self.is_selecting = False
         self.selection_start_point = None
         self.selection_end_point = None
+        self.is_adding_text = False # 텍스트 추가 상태 플래그
         
         # 화살표 색상/두께 변수
         self.arrow_color = QColor(Qt.red) 
@@ -369,6 +505,10 @@ class ImageEditor(QMainWindow):
         # 펜 색상/두께 변수 추가
         self.pen_color = QColor(Qt.red) # 기본 빨간색
         self.current_pen_thickness = CustomColorPicker.DEFAULT_THICKNESS # 기본 두께
+        
+        # 텍스트 색상/크기 변수 추가
+        self.text_color = QColor(Qt.black) # 기본 검정색
+        self.text_font_size = self.DEFAULT_FONT_SIZE # 기본 폰트 크기
         
         # UI 초기화
         self.initUI()
@@ -522,9 +662,10 @@ class ImageEditor(QMainWindow):
         crop_action.setToolTip("Crop image")
         self.toolbar.addAction(crop_action)
         
-        # 텍스트 추가 버튼
+        # 텍스트 추가 버튼 (activate_text_tool 연결)
         text_action = QAction(QIcon("assets/text_icon.svg"), "Text", self)
-        text_action.setToolTip("Add text")
+        text_action.setToolTip("Add text (Select color and size)") # 툴팁 수정
+        text_action.triggered.connect(self.activate_text_tool) # 시그널 연결
         self.toolbar.addAction(text_action)
         
         # 펜 도구 버튼
@@ -594,6 +735,7 @@ class ImageEditor(QMainWindow):
         self.is_selecting = False
         self.selection_start_point = None
         self.selection_end_point = None
+        self.is_adding_text = False # 다른 도구 선택 시 텍스트 추가 상태 해제
         self.image_canvas.update() # 혹시 이전 선택 영역 남아있을까봐 업데이트
 
     def apply_mosaic(self, img_rect, block_size):
@@ -667,6 +809,7 @@ class ImageEditor(QMainWindow):
             self.is_selecting = False
             self.selection_start_point = None
             self.selection_end_point = None
+            self.is_adding_text = False # 다른 도구 선택 시 텍스트 추가 상태 해제
             self.image_canvas.update()
         else:
             print("Rectangle tool activation cancelled.")
@@ -689,6 +832,7 @@ class ImageEditor(QMainWindow):
             self.is_selecting = False
             self.selection_start_point = None
             self.selection_end_point = None
+            self.is_adding_text = False # 다른 도구 선택 시 텍스트 추가 상태 해제
             self.image_canvas.update()
         else:
             print("Circle tool activation cancelled.")
@@ -712,6 +856,7 @@ class ImageEditor(QMainWindow):
             self.is_selecting = False
             self.selection_start_point = None
             self.selection_end_point = None
+            self.is_adding_text = False # 다른 도구 선택 시 텍스트 추가 상태 해제
             self.image_canvas.update()
         else: 
             print("Arrow tool activation cancelled.")
@@ -732,6 +877,7 @@ class ImageEditor(QMainWindow):
             print(f"Pen tool activated. Color: {self.pen_color.name()}, Thickness: {self.current_pen_thickness}")
             self.image_canvas.setCursor(Qt.CrossCursor) # 또는 Qt.PointingHandCursor 등
             self.is_selecting = False # 그리기 상태 초기화
+            self.is_adding_text = False # 다른 도구 선택 시 텍스트 추가 상태 해제
             self.image_canvas.update()
         else:
             print("Pen tool activation cancelled.")
@@ -758,12 +904,44 @@ class ImageEditor(QMainWindow):
             print(f"Highlight tool activated. Selected Thickness (Picker): {selected_thickness}, Drawing Thickness (Actual): {self.current_highlight_thickness}, Color: {self.highlight_color.name(QColor.HexArgb)}")
             self.image_canvas.setCursor(Qt.CrossCursor) # 또는 다른 적절한 커서
             self.is_selecting = False # freehand drawing이므로 is_selecting 대신 다른 플래그 사용 가능성 있음
+            self.is_adding_text = False # 다른 도구 선택 시 텍스트 추가 상태 해제
             self.stroke_points = [] # 스트로크 점 리스트 초기화
             self.image_canvas.update()
         else:
             print("Highlight tool activation cancelled.")
             self.current_tool = None
             self.image_canvas.setCursor(Qt.ArrowCursor)
+
+    def activate_text_tool(self):
+        """텍스트 도구 활성화, 색상/크기 선택 및 커서 변경"""
+        self.current_tool = 'text'
+        # CustomColorPicker 호출 (두께 대신 폰트 크기 선택)
+        # getColorAndThickness 재사용, 두께 레이블이 폰트 크기임을 인지해야 함
+        # Picker의 두께 범위를 폰트 크기에 맞게 조정 (1 ~ MAX_FONT_SIZE)
+        # CustomColorPicker 클래스 자체를 수정하는 대신, 호출 시 범위 정보를 전달하거나,
+        # 여기서는 일단 Picker의 기본 MAX_THICKNESS를 사용하고, 반환값을 검증.
+        color, size, ok = CustomColorPicker.getColorAndThickness(
+            self.text_color, self.text_font_size, self,
+            # min_val=1, max_val=self.MAX_FONT_SIZE, # getColorAndThickness 수정 필요
+            # thickness_label="Font Size:" # getColorAndThickness 수정 필요
+        )
+
+        if ok:
+            self.text_color = color
+            # 선택된 크기를 최대/최소 폰트 크기 내로 제한
+            self.text_font_size = max(1, min(size, self.MAX_FONT_SIZE))
+            print(f"Text tool activated. Color: {self.text_color.name()}, Font Size: {self.text_font_size}")
+            self.image_canvas.setCursor(Qt.IBeamCursor) # 텍스트 입력 커서
+            self.is_selecting = False # 다른 모드 비활성화
+            self.is_adding_text = True # 텍스트 추가 모드 활성화
+            self.selection_start_point = None
+            self.selection_end_point = None
+            self.image_canvas.update()
+        else:
+            print("Text tool activation cancelled.")
+            self.current_tool = None
+            self.image_canvas.setCursor(Qt.ArrowCursor)
+            self.is_adding_text = False
 
     def load_image(self, image_path):
         """이미지 로드 및 표시, Undo 스택 초기화"""
@@ -926,6 +1104,36 @@ class ImageEditor(QMainWindow):
         else:
             self.highlight_overlay_image = None
             print("[Overlay] Cleared (no base image)")
+
+    def draw_text(self, img_position, text, color, size):
+        """이미지 상의 지정된 위치에 텍스트 그리기"""
+        print(f"[DrawText] Entered. Pos: {img_position}, Text: '{text}', Color: {color.name()}, Size: {size}")
+        if not self.edited_image or self.edited_image.isNull() or not text:
+            print("[DrawText] Error: No edited image or empty text.")
+            return
+
+        painter = QPainter(self.edited_image)
+        font = QFont()
+        font.setPixelSize(size) # 픽셀 크기로 설정
+        painter.setFont(font)
+        painter.setPen(color) # 텍스트 색상 설정
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.TextAntialiasing)
+
+        # 폰트 메트릭스를 사용하여 텍스트 경계 계산
+        fm = QFontMetrics(painter.font())
+        bounding_rect = fm.boundingRect(text)
+
+        # img_position을 좌상단으로 하고 계산된 크기를 갖는 QRect 생성
+        # boundingRect는 때때로 음수 x/y를 가질 수 있으므로, 너비/높이만 사용
+        target_rect = QRect(img_position, bounding_rect.size())
+        # 필요하다면 약간의 패딩을 추가할 수 있음: target_rect.adjust(0, 0, 2, 2)
+
+        # img_position을 좌상단 기준으로 텍스트 그리기 (QRect과 정렬 플래그 사용)
+        painter.drawText(target_rect, Qt.AlignTop | Qt.AlignLeft, text)
+
+        painter.end()
+        print(f"[DrawText] Finished drawing text.")
 
 # 테스트 코드 (독립 실행용)
 if __name__ == "__main__":
