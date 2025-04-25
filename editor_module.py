@@ -192,6 +192,7 @@ class ImageEditor(QMainWindow):
         
         copy_action = QAction(QIcon("assets/copy_icon.svg"), "Copy", self)
         copy_action.setToolTip("Copy to clipboard")
+        copy_action.triggered.connect(self.copy_to_clipboard) # 시그널 연결
         self.toolbar.addAction(copy_action)
         
         self.toolbar.addSeparator()
@@ -1076,6 +1077,24 @@ class ImageEditor(QMainWindow):
             print(f"[Rotate] Error during rotation: {e}")
             traceback.print_exc()
             if self.undo_stack: self.undo_stack.pop() # 에러 시 undo 복구
+
+    def copy_to_clipboard(self):
+        """현재 편집된 이미지를 클립보드에 복사합니다."""
+        if not self.edited_image or self.edited_image.isNull():
+            QMessageBox.warning(self, "Warning", "No image to copy.")
+            print("[Copy] No image available to copy.")
+            return
+            
+        try:
+            clipboard = QApplication.clipboard()
+            clipboard.setImage(self.edited_image)
+            print("[Copy] Image copied to clipboard successfully.")
+            # 사용자에게 성공 알림 (선택적)
+            # QMessageBox.information(self, "Success", "Image copied to clipboard!")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to copy image to clipboard:\n{e}")
+            print(f"[Copy] Error copying image to clipboard: {e}")
+            traceback.print_exc()
 
 # 테스트 코드 (독립 실행용)
 if __name__ == "__main__":
