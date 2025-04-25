@@ -108,31 +108,31 @@ class ImageEditor(QMainWindow):
             self.update_undo_redo_actions()
 
     def undo_action_triggered(self):
-        """실행 취소"""
-        if len(self.undo_stack) > 1: # 현재 상태 제외하고 이전 상태가 있어야 함
-             # 현재 상태를 Redo 스택에 넣음
-            current_state = self.undo_stack.pop()
-            self.redo_stack.append(current_state)
-             # 이전 상태를 가져와 적용
-            self.edited_image = QImage(self.undo_stack[-1]) # 스택의 마지막(최신) 상태
-            self.update_canvas()
-            self.update_undo_redo_actions()
-        elif len(self.undo_stack) == 1: # 원본 이미지만 남은 경우
-            current_state = self.undo_stack.pop()
-            self.redo_stack.append(current_state)
-            self.edited_image = QImage(self.original_image) # 원본으로 복구
-            self.update_canvas()
-            self.update_undo_redo_actions()
+        """실행 취소 (상태는 작업 *후* 저장됨)"""
+        if len(self.undo_stack) > 1: # 현재 상태 외에 이전 상태가 있어야 함 (원본 상태는 Undo 불가)
+             # 현재 상태(Undo할 상태)를 Undo 스택에서 제거하고 Redo 스택에 추가
+             current_state = self.undo_stack.pop()
+             self.redo_stack.append(current_state) # 작업 후 상태 저장
+
+             # 이전 상태(이제 Undo 스택의 마지막 상태)를 편집 이미지로 복원
+             previous_state = self.undo_stack[-1]
+             self.edited_image = QImage(previous_state) # 복사본 사용
+
+             self.update_canvas()
+             self.update_undo_redo_actions()
+        # else:
+        #    print("[Undo] Cannot undo initial state.")
 
     def redo_action_triggered(self):
-        """다시 실행"""
+        """다시 실행 (상태는 작업 *후* 저장됨)"""
         if self.redo_stack:
-            # Redo 스택에서 상태를 가져옴
+            # Redo 스택에서 상태(복원할 작업 후 상태)를 가져옴
             redo_state = self.redo_stack.pop()
-            # 현재 상태를 Undo 스택에 다시 넣음 (Redo 이전 상태)
-            self.undo_stack.append(QImage(self.edited_image))
+            # 가져온 상태를 다시 Undo 스택에 추가
+            self.undo_stack.append(QImage(redo_state)) # 복사본 사용
             # Redo 상태 적용
-            self.edited_image = QImage(redo_state)
+            self.edited_image = QImage(redo_state) # 복사본 사용
+
             self.update_canvas()
             self.update_undo_redo_actions()
             
@@ -140,9 +140,34 @@ class ImageEditor(QMainWindow):
         """Undo/Redo 액션 활성화/비활성화 업데이트"""
         # 'undo_action'과 'redo_action' 속성이 있는지 확인 후 상태 업데이트
         if hasattr(self, 'undo_action'):
-             self.undo_action.setEnabled(len(self.undo_stack) > 0)
+             # 원본 상태 외에 다른 상태가 있을 때만 Undo 활성화
+             self.undo_action.setEnabled(len(self.undo_stack) > 1)
         if hasattr(self, 'redo_action'):
              self.redo_action.setEnabled(len(self.redo_stack) > 0)
+
+    def reset_image(self):
+        """이미지를 원본 상태로 되돌립니다."""
+        if not self.original_image or self.original_image.isNull():
+            print("[Reset] No original image to reset to.")
+            return
+        
+        if self.edited_image and self.edited_image != self.original_image:
+            print("[Reset] Resetting image to original state...")
+            # Redo 스택을 비우고, Undo 스택에는 원본 이미지만 남김
+            self.redo_stack.clear()
+            self.undo_stack = [QImage(self.original_image)]
+            self.edited_image = QImage(self.original_image)
+            
+            self.update_canvas()
+            self.update_undo_redo_actions()
+            # 모든 도구 상태 및 선택 상태 초기화
+            self.reset_tool_state() 
+            self.reset_selection_state()
+            # 오버레이 이미지 초기화
+            self.initialize_overlay()
+            print("[Reset] Image reset successfully.")
+        else:
+            print("[Reset] Image is already in its original state.")
 
     # 캔버스 업데이트 함수
     def update_canvas(self):
@@ -188,7 +213,7 @@ class ImageEditor(QMainWindow):
         # 리셋 버튼 (기능 구현 필요)
         reset_action = QAction(QIcon("assets/reset_icon.svg"), "Reset", self)
         reset_action.setToolTip("Reset to original image")
-        # reset_action.triggered.connect(self.reset_image) # 예시 연결
+        reset_action.triggered.connect(self.reset_image) # 시그널 연결
         self.toolbar.addAction(reset_action)
         
         self.toolbar.addSeparator()
@@ -610,12 +635,13 @@ class ImageEditor(QMainWindow):
             print(f"[ApplyCrop] Cropping to image rect: {valid_img_rect}")
             # try...except 블록을 중첩하여 자르기 자체의 오류 처리
             try:
-                self.push_undo_state() # 자르기 전 상태 저장
+                # self.push_undo_state() # 자르기 전 상태 저장 -> 작업 후로 이동
                 print("[DEBUG] Calling edited_image.copy()")
                 cropped_image = self.edited_image.copy(valid_img_rect)
                 print("[DEBUG] edited_image.copy() finished")
                 self.edited_image = cropped_image
                 self.original_image = QImage(self.edited_image) # 자른 후에는 원본도 업데이트 (선택적)
+                self.push_undo_state() # 작업 후 상태 저장
                 print("[DEBUG] Calling update_canvas after crop")
                 self.update_canvas()
                 print("[DEBUG] Calling initialize_overlay after crop")
@@ -892,8 +918,9 @@ class ImageEditor(QMainWindow):
         
         try:
             print("[FlipH] Flipping horizontally...")
-            self.push_undo_state() # 뒤집기 전 상태 저장
+            # self.push_undo_state() # 뒤집기 전 상태 저장 -> 작업 후로 이동
             self.edited_image = self.edited_image.mirrored(True, False)
+            self.push_undo_state() # 작업 후 상태 저장
             self.update_canvas()
             self.update_undo_redo_actions()
             # 오버레이 재설정 (선택적이지만 안전함)
@@ -912,8 +939,9 @@ class ImageEditor(QMainWindow):
             
         try:
             print("[FlipV] Flipping vertically...")
-            self.push_undo_state() # 뒤집기 전 상태 저장
+            # self.push_undo_state() # 뒤집기 전 상태 저장 -> 작업 후로 이동
             self.edited_image = self.edited_image.mirrored(False, True)
+            self.push_undo_state() # 작업 후 상태 저장
             self.update_canvas()
             self.update_undo_redo_actions()
             # 오버레이 재설정
@@ -945,7 +973,7 @@ class ImageEditor(QMainWindow):
 
         print(f"[LiftSelection] Copying image data from: {valid_img_rect}")
         try:
-            self.push_undo_state() # 띄어내기 전 상태 저장
+            # self.push_undo_state() # 띄어내기 전 상태 저장 -> 작업 후로 이동
             # QPixmap으로 복사 (투명 배경 지원 위해)
             copied_image = self.edited_image.copy(valid_img_rect)
             self.selected_content_pixmap = QPixmap.fromImage(copied_image)
@@ -1004,11 +1032,12 @@ class ImageEditor(QMainWindow):
             return
             
         try:
-            self.push_undo_state() # 병합 전 상태 저장
+            # self.push_undo_state() # 병합 전 상태 저장 -> 작업 후로 이동
             painter = QPainter(self.edited_image)
             # QPixmap을 QRect에 맞춰 그림 (source rect는 QPixmap 전체)
             painter.drawPixmap(img_target_rect, self.selected_content_pixmap, self.selected_content_pixmap.rect())
             painter.end()
+            self.push_undo_state() # 작업 후 상태 저장
             print("[MergeSelection] Selection merged successfully.")
             self.update_canvas()
             self.update_undo_redo_actions()
@@ -1030,13 +1059,14 @@ class ImageEditor(QMainWindow):
             
         try:
             print("[Rotate] Rotating 90 degrees clockwise...")
-            self.push_undo_state() # 회전 전 상태 저장
+            # self.push_undo_state() # 회전 전 상태 저장 -> 작업 후로 이동
             
             # QTransform을 사용하여 90도 회전 적용
             transform = QTransform()
             transform.rotate(90)
             self.edited_image = self.edited_image.transformed(transform, Qt.SmoothTransformation)
             
+            self.push_undo_state() # 작업 후 상태 저장
             self.update_canvas()
             self.update_undo_redo_actions()
             # 회전 후 이미지 크기가 변경되므로 오버레이 재설정

@@ -235,7 +235,7 @@ class ImageCanvas(QWidget):
                      self.editor.highlight_overlay_image.fill(Qt.transparent)
                  self.editor.stroke_points = [event.pos()]
              elif tool == 'pen':
-                 self.editor.push_undo_state()
+                 # self.editor.push_undo_state() # 펜 시작 시 undo 저장 제거 -> 릴리스 시 저장
                  self.last_draw_point = event.pos()
                  self.last_img_draw_point = self.map_widget_to_image(self.last_draw_point)
                  if self.last_img_draw_point:
@@ -469,14 +469,15 @@ class ImageCanvas(QWidget):
                          valid_img_points = [p for p in img_points if p is not None]
                          if len(valid_img_points) > 1:
                              print(f"[MouseRelease] Calling draw_highlight_stroke on edited_image")
-                             self.editor.push_undo_state()
                              self.editor.draw_highlight_stroke(valid_img_points, self.editor.highlight_color, self.editor.current_highlight_thickness)
+                             self.editor.push_undo_state() # 작업 후 상태 저장
                          else: print("Highlight stroke too short or invalid.")
                      else: print("Highlight stroke too short.")
                      if self.editor.highlight_overlay_image:
                          self.editor.highlight_overlay_image.fill(Qt.transparent)
              elif tool == 'pen':
                  print("[MouseRelease] Pen drawing finished.")
+                 self.editor.push_undo_state() # 펜 작업 최종 상태 저장
              else:
                  start_widget = self.editor.selection_start_point
                  end_widget = event.pos()
@@ -491,16 +492,18 @@ class ImageCanvas(QWidget):
                              img_rect = QRect(img_start, img_end).normalized()
                              if img_rect.width() > 0 and img_rect.height() > 0:
                                  print("[MouseRelease] Applying mosaic...")
-                                 self.editor.push_undo_state()
+                                 # self.editor.push_undo_state()
                                  self.editor.apply_mosaic(img_rect, self.editor.mosaic_level)
+                                 self.editor.push_undo_state() # 작업 후 상태 저장
                                  self.editor.update_canvas()
                              else:
                                  print("Mosaic selection too small.")
                          elif tool == 'arrow':
                              if img_start != img_end:
                                   print(f"[MouseRelease] Calling draw_arrow: {img_start} -> {img_end}, Color: {self.editor.arrow_color.name()}, Thickness: {self.editor.current_arrow_thickness}")
-                                  self.editor.push_undo_state()
+                                  # self.editor.push_undo_state()
                                   self.editor.draw_arrow(img_start, img_end, self.editor.arrow_color, self.editor.current_arrow_thickness)
+                                  self.editor.push_undo_state() # 작업 후 상태 저장
                                   self.editor.update_canvas()
                              else:
                                   print("Arrow start and end points are the same.")
@@ -508,8 +511,9 @@ class ImageCanvas(QWidget):
                              img_rect = QRect(img_start, img_end).normalized()
                              if img_rect.width() > 0 and img_rect.height() > 0:
                                  print(f"[MouseRelease] Calling draw_circle: Rect: {img_rect}, Color: {self.editor.circle_color.name()}, Thickness: {self.editor.current_circle_thickness}")
-                                 self.editor.push_undo_state()
+                                 # self.editor.push_undo_state()
                                  self.editor.draw_circle(img_rect, self.editor.circle_color, self.editor.current_circle_thickness)
+                                 self.editor.push_undo_state() # 작업 후 상태 저장
                                  self.editor.update_canvas()
                              else:
                                  print("Circle selection too small.")
@@ -517,8 +521,9 @@ class ImageCanvas(QWidget):
                              img_rect = QRect(img_start, img_end).normalized()
                              if img_rect.width() > 0 and img_rect.height() > 0:
                                  print(f"[MouseRelease] Calling draw_rectangle: Rect: {img_rect}, Color: {self.editor.rectangle_color.name()}, Thickness: {self.editor.current_rectangle_thickness}")
-                                 self.editor.push_undo_state()
+                                 # self.editor.push_undo_state()
                                  self.editor.draw_rectangle(img_rect, self.editor.rectangle_color, self.editor.current_rectangle_thickness)
+                                 self.editor.push_undo_state() # 작업 후 상태 저장
                                  self.editor.update_canvas()
                              else:
                                  print("Rectangle selection too small.")
@@ -679,13 +684,13 @@ class ImageCanvas(QWidget):
                                 image_font_size = delta_y
                         print(f"[DEBUG] Calculated image font size: {image_font_size}")
                         
-                        print("[DEBUG] Calling push_undo_state")
-                        self.editor.push_undo_state() 
-                        print("[DEBUG] push_undo_state finished")
-                        
                         print(f"[DEBUG] Calling draw_text with img_position={img_position}, text='{text}', color={self.editor.text_color.name()}, size={image_font_size}")
                         self.editor.draw_text(img_position, text, self.editor.text_color, image_font_size) # ImageEditor의 draw_text 호출
                         print("[DEBUG] draw_text finished")
+                        
+                        print("[DEBUG] Calling push_undo_state after draw_text")
+                        self.editor.push_undo_state() # 작업 후 상태 저장
+                        print("[DEBUG] push_undo_state finished")
                         
                         print("[DEBUG] Calling update_canvas")
                         self.editor.update_canvas() # ImageEditor의 update_canvas 호출
