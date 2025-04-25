@@ -24,6 +24,7 @@ Snipix is a powerful screen capture tool that allows you to take high-quality sc
 ## Demo 📸
 
 ![Demo - Snipix Interface](assets/Demo_1.png)
+![Demo - Image Editor](assets/Demo_2.png)
 
 ## System Requirements 💻
 
