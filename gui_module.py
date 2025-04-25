@@ -817,16 +817,18 @@ class CaptureUI(QMainWindow):
             self.statusBar().showMessage('No image captured to show in full screen.')
 
     def open_image_editor(self):
-        """이미지 편집기 열기"""
+        """이미지 편집기 열기 (수정: edit_image 메서드 호출)"""
         if not self.last_capture_path:
             QMessageBox.warning(self, "Error", "No image captured to edit!")
             return
             
-        # 이미지 편집기 인스턴스 생성
-        self.image_editor = ImageEditor(self.last_capture_path, self)
-        # 저장 완료 시그널 연결
-        self.image_editor.imageSaved.connect(self.handle_image_saved)
-        self.image_editor.show()
+        # self.edit_image 메서드를 호출하여 편집기 열기 및 숨기기 로직 실행
+        self.edit_image(self.last_capture_path)
+        
+        # 아래 코드는 edit_image 메서드로 이동되었으므로 주석 처리 또는 삭제
+        # self.image_editor = ImageEditor(self.last_capture_path, self)
+        # self.image_editor.imageSaved.connect(self.handle_image_saved)
+        # self.image_editor.show()
         
         # 상태 표시줄 메시지 업데이트
         self.statusBar().showMessage("Image editor opened")
@@ -853,6 +855,36 @@ class CaptureUI(QMainWindow):
                 print("[GUI] Failed to load saved image into QImage for capture module update.")
         except Exception as e:
             print(f"[GUI] Error updating capture module image: {e}")
+
+    # --- edit_image 메서드 추가 ---
+    def edit_image(self, image_path):
+        """선택된 이미지를 편집기에 엽니다."""
+        print(f"[GUI DEBUG] edit_image called with path: {image_path}") # 로그 메시지 수정
+        if image_path:
+            try:
+                self.hide() # 메인 창 숨기기
+                # ImageEditor 인스턴스 생성
+                self.editor = ImageEditor(image_path, parent=self)
+                # 편집기가 닫힐 때 메인 창을 다시 표시하도록 closed 시그널 연결
+                self.editor.closed.connect(self.show)
+                # 편집기에서 이미지가 저장될 때 handle_image_saved 슬롯 호출하도록 연결
+                self.editor.imageSaved.connect(self.handle_image_saved)
+                # 편집기 창 표시
+                self.editor.show()
+            except Exception as e:
+                print(f"[GUI Error] Failed to open ImageEditor: {e}") # 로그 메시지 수정
+                traceback.print_exc()
+                self.show() # 에디터 열기 실패 시 다시 메인 창 표시
+                QMessageBox.warning(self, "Editor Error", f"Failed to open image editor: {e}")
+        else:
+            print("[GUI Warning] No image path provided to edit_image") # 로그 메시지 수정
+
+    # --- update_thumbnail 메서드 추가 (기능은 추후 구현) ---
+    def update_thumbnail(self, image_path):
+        """캡처 완료 후 썸네일을 업데이트합니다 (현재는 비어 있음)."""
+        print(f"[GUI DEBUG] update_thumbnail called with path: {image_path}") # 로그 메시지 수정
+        # TODO: 썸네일 업데이트 로직 구현 (필요시)
+        pass
 
 class WindowSelector(QWidget):
     """마우스 호버로 캡처할 창을 선택하는 위젯"""

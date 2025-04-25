@@ -1,9 +1,10 @@
 import sys
 import os
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QMessageBox
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt
 import ctypes
+import traceback
 
 # 로깅 설정 가져오기
 from log_setup import setup_logging
@@ -15,6 +16,7 @@ from utils import get_resource_path
 from capture_module import ScreenCapture
 from gui_module import CaptureUI
 from config_module import ConfigManager
+from editor_module import ImageEditor
 
 def main():
     # 로깅 설정 적용

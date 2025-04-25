@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QLabel, QAction,
                             QToolBar, QFileDialog, QMessageBox, QApplication, QDesktopWidget, 
                             QToolButton, QMenu, QColorDialog, QComboBox, QLineEdit)
 from PyQt5.QtGui import QPixmap, QImage, QIcon, QPainter, QPen, QColor, QPolygonF, QBrush, QFont, QFontMetrics, QCursor, QPainterPath, QTransform
-from PyQt5.QtCore import Qt, QSize, QRect, QPoint, QRectF, QSizeF, QLineF, QPointF, pyqtSignal, QBuffer, QIODevice
+from PyQt5.QtCore import Qt, QSize, QRect, QPoint, QRectF, QSizeF, QLineF, QPointF, pyqtSignal, QBuffer, QIODevice, QMimeData
 import math
 import traceback
 import io
@@ -19,6 +19,7 @@ class ImageEditor(QMainWindow):
     """이미지 편집 기능을 제공하는 창"""
     # 저장 완료 시그널 (저장된 파일 경로 전달)
     imageSaved = pyqtSignal(str)
+    closed = pyqtSignal() # 창 닫힘 시그널 추가
     
     # 모자이크 레벨 상수 정의
     MOSAIC_LEVELS = {'Weak': 5, 'Medium': 10, 'Strong': 20}
@@ -1120,7 +1121,7 @@ class ImageEditor(QMainWindow):
                 win32clipboard.SetClipboardData(win32clipboard.CF_DIB, dib_data)
                 win32clipboard.CloseClipboard()
                 print("[Copy] Image copied to clipboard using Pillow and pywin32 (CF_DIB).")
-                self.close() # 복사 성공 후 창 닫기 추가
+                # self.close() # 복사 시그널에서 직접 닫지 않고, closeEvent에서 시그널 발생
 
             except Exception as e:
                 print(f"[ERROR] Exception during clipboard operation (Pillow/pywin32): {e}")
@@ -1173,6 +1174,12 @@ class ImageEditor(QMainWindow):
             QMessageBox.critical(self, "Error", f"An error occurred while saving:\n{e}")
             print(f"[Save] Error saving image: {e}")
             traceback.print_exc()
+
+    def closeEvent(self, event):
+        """창이 닫힐 때 closed 시그널을 발생시킵니다."""
+        print("[DEBUG] ImageEditor closeEvent called.")
+        self.closed.emit() # 시그널 발생
+        super().closeEvent(event) # 기본 closeEvent 처리
 
 # 테스트 코드 (독립 실행용)
 if __name__ == "__main__":
