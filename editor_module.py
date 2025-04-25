@@ -1120,6 +1120,7 @@ class ImageEditor(QMainWindow):
                 win32clipboard.SetClipboardData(win32clipboard.CF_DIB, dib_data)
                 win32clipboard.CloseClipboard()
                 print("[Copy] Image copied to clipboard using Pillow and pywin32 (CF_DIB).")
+                self.close() # 복사 성공 후 창 닫기 추가
 
             except Exception as e:
                 print(f"[ERROR] Exception during clipboard operation (Pillow/pywin32): {e}")
