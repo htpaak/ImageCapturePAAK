@@ -3,7 +3,7 @@ import os
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QLabel, QAction, 
                             QToolBar, QFileDialog, QMessageBox, QApplication, QDesktopWidget, 
                             QToolButton, QMenu, QColorDialog, QComboBox, QLineEdit)
-from PyQt5.QtGui import QPixmap, QImage, QIcon, QPainter, QPen, QColor, QPolygonF, QBrush, QFont, QFontMetrics, QCursor, QPainterPath
+from PyQt5.QtGui import QPixmap, QImage, QIcon, QPainter, QPen, QColor, QPolygonF, QBrush, QFont, QFontMetrics, QCursor, QPainterPath, QTransform
 from PyQt5.QtCore import Qt, QSize, QRect, QPoint, QRectF, QSizeF, QLineF, QPointF
 import math
 import traceback
@@ -195,7 +195,8 @@ class ImageEditor(QMainWindow):
         
         # 이미지 회전 버튼
         rotate_action = QAction(QIcon("assets/rotate_icon.svg"), "Rotate", self)
-        rotate_action.setToolTip("Rotate image")
+        rotate_action.setToolTip("Rotate image 90 degrees clockwise")
+        rotate_action.triggered.connect(self.rotate_image)
         self.toolbar.addAction(rotate_action)
         
         # 좌우 반전 버튼
@@ -1020,6 +1021,31 @@ class ImageEditor(QMainWindow):
         # 병합 성공/실패 여부와 관계없이 선택 상태는 초기화
         self.reset_selection_state()
         self.current_tool = None # 도구 선택도 초기화
+
+    def rotate_image(self):
+        """이미지를 시계 방향으로 90도 회전합니다."""
+        if not self.edited_image or self.edited_image.isNull():
+            print("[Rotate] No image to rotate.")
+            return
+            
+        try:
+            print("[Rotate] Rotating 90 degrees clockwise...")
+            self.push_undo_state() # 회전 전 상태 저장
+            
+            # QTransform을 사용하여 90도 회전 적용
+            transform = QTransform()
+            transform.rotate(90)
+            self.edited_image = self.edited_image.transformed(transform, Qt.SmoothTransformation)
+            
+            self.update_canvas()
+            self.update_undo_redo_actions()
+            # 회전 후 이미지 크기가 변경되므로 오버레이 재설정
+            self.initialize_overlay()
+            print("[Rotate] Rotation successful.")
+        except Exception as e:
+            print(f"[Rotate] Error during rotation: {e}")
+            traceback.print_exc()
+            if self.undo_stack: self.undo_stack.pop() # 에러 시 undo 복구
 
 # 테스트 코드 (독립 실행용)
 if __name__ == "__main__":
