@@ -640,7 +640,7 @@ class ImageEditor(QMainWindow):
                 cropped_image = self.edited_image.copy(valid_img_rect)
                 print("[DEBUG] edited_image.copy() finished")
                 self.edited_image = cropped_image
-                self.original_image = QImage(self.edited_image) # 자른 후에는 원본도 업데이트 (선택적)
+                # self.original_image = QImage(self.edited_image) # 자른 후에는 원본도 업데이트 (선택적) -> 제거: 원본은 유지
                 self.push_undo_state() # 작업 후 상태 저장
                 print("[DEBUG] Calling update_canvas after crop")
                 self.update_canvas()
