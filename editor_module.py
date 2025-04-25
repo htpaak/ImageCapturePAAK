@@ -4,9 +4,12 @@ from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QLabel, QAction,
                             QToolBar, QFileDialog, QMessageBox, QApplication, QDesktopWidget, 
                             QToolButton, QMenu, QColorDialog, QComboBox, QLineEdit)
 from PyQt5.QtGui import QPixmap, QImage, QIcon, QPainter, QPen, QColor, QPolygonF, QBrush, QFont, QFontMetrics, QCursor, QPainterPath, QTransform
-from PyQt5.QtCore import Qt, QSize, QRect, QPoint, QRectF, QSizeF, QLineF, QPointF, pyqtSignal
+from PyQt5.QtCore import Qt, QSize, QRect, QPoint, QRectF, QSizeF, QLineF, QPointF, pyqtSignal, QBuffer, QIODevice
 import math
 import traceback
+import io
+from PIL import Image
+import win32clipboard
 # 사용자 정의 색상 선택기 import
 from color_picker_module import CustomColorPicker 
 # 분리된 ImageCanvas import
@@ -190,7 +193,7 @@ class ImageEditor(QMainWindow):
         
         # 저장 버튼
         save_action = QAction(QIcon("assets/save_icon.svg"), "Save", self)
-        save_action.setToolTip("Save image and close editor") # 툴팁 수정
+        save_action.setToolTip("Save image and close editor") # 툴큁 수정
         save_action.triggered.connect(self.save_image_and_close) # 시그널 연결
         self.toolbar.addAction(save_action)
         
@@ -1083,22 +1086,55 @@ class ImageEditor(QMainWindow):
             if self.undo_stack: self.undo_stack.pop() # 에러 시 undo 복구
 
     def copy_to_clipboard(self):
-        """현재 편집된 이미지를 클립보드에 복사합니다."""
-        if not self.edited_image or self.edited_image.isNull():
-            QMessageBox.warning(self, "Warning", "No image to copy.")
-            print("[Copy] No image available to copy.")
-            return
-            
-        try:
-            clipboard = QApplication.clipboard()
-            clipboard.setImage(self.edited_image)
-            print("[Copy] Image copied to clipboard successfully.")
-            # 사용자에게 성공 알림 (선택적)
-            # QMessageBox.information(self, "Success", "Image copied to clipboard!")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to copy image to clipboard:\n{e}")
-            print(f"[Copy] Error copying image to clipboard: {e}")
-            traceback.print_exc()
+        """편집된 이미지를 Pillow와 pywin32를 사용하여 클립보드에 복사합니다."""
+        print("[DEBUG] copy_to_clipboard (Pillow/pywin32) called.")
+        if self.edited_image and not self.edited_image.isNull():
+            print(f"[DEBUG] edited_image is valid. Size: {self.edited_image.size()}, Format: {self.edited_image.format()}")
+            try:
+                # 1. QImage를 Pillow Image로 변환
+                buffer = QBuffer()
+                buffer.open(QIODevice.WriteOnly)
+                # PNG로 저장하여 투명도 유지 시도
+                self.edited_image.save(buffer, "PNG") 
+                buffer.seek(0) # 버퍼 포인터를 시작으로 이동
+                pil_image = Image.open(io.BytesIO(buffer.data()))
+                buffer.close()
+                print("[DEBUG] QImage converted to Pillow Image.")
+
+                # 2. Pillow Image를 DIB 형식으로 변환 (BMP 저장 후 헤더 제거)
+                output = io.BytesIO()
+                # Pillow 이미지를 BMP 형식으로 메모리에 저장 (RGB 모드로 변환 필요할 수 있음)
+                # pil_image = pil_image.convert("RGB") # 필요시 주석 해제
+                pil_image.save(output, "BMP")
+                bmp_data = output.getvalue()
+                output.close()
+                
+                # BMP 파일 헤더(14바이트)를 제외한 DIB 데이터 추출
+                # BMP 파일 구조상 DIB 데이터는 14바이트 이후부터 시작
+                dib_data = bmp_data[14:] 
+                print(f"[DEBUG] Pillow Image converted to DIB format (size: {len(dib_data)} bytes).")
+
+                # 3. win32clipboard를 사용하여 DIB 데이터 복사
+                win32clipboard.OpenClipboard()
+                win32clipboard.EmptyClipboard()
+                win32clipboard.SetClipboardData(win32clipboard.CF_DIB, dib_data)
+                win32clipboard.CloseClipboard()
+                print("[Copy] Image copied to clipboard using Pillow and pywin32 (CF_DIB).")
+
+            except Exception as e:
+                print(f"[ERROR] Exception during clipboard operation (Pillow/pywin32): {e}")
+                traceback.print_exc()
+                # 실패 시 클립보드 닫기 시도
+                try:
+                    win32clipboard.CloseClipboard()
+                except Exception as e_close:
+                    print(f"[ERROR] Failed to close clipboard after error: {e_close}")
+        else:
+            if not self.edited_image:
+                print("[DEBUG] edited_image is None.")
+            elif self.edited_image.isNull():
+                print("[DEBUG] edited_image is Null.")
+            print("No valid image to copy.")
 
     def save_image_and_close(self):
         """편집된 이미지를 원본 파일에 저장하고 창을 닫습니다."""
