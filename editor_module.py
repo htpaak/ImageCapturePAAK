@@ -3,22 +3,32 @@ import sys
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QLabel, QAction, 
                             QToolBar, QFileDialog, QMessageBox, QApplication, QDesktopWidget, 
                             QToolButton, QMenu, QColorDialog, QComboBox, QLineEdit)
-from PyQt5.QtGui import QPixmap, QImage, QIcon, QPainter, QPen, QColor, QPolygonF, QBrush, QFont, QFontMetrics
+from PyQt5.QtGui import QPixmap, QImage, QIcon, QPainter, QPen, QColor, QPolygonF, QBrush, QFont, QFontMetrics, QCursor, QPainterPath
 from PyQt5.QtCore import Qt, QSize, QRect, QPoint, QRectF, QSizeF, QLineF, QPointF
 import math
+import traceback
 # 사용자 정의 색상 선택기 import
 from color_picker_module import CustomColorPicker 
 
 class ImageCanvas(QWidget):
     """이미지를 직접 그리는 캔버스 위젯"""
+    # 핸들 크기 및 상태 상수 정의
+    HANDLE_SIZE = 8
+    HANDLE_HALF = HANDLE_SIZE // 2
+    NO_HANDLE, TOP_LEFT, TOP_MIDDLE, TOP_RIGHT, MIDDLE_LEFT, MIDDLE_RIGHT, BOTTOM_LEFT, BOTTOM_MIDDLE, BOTTOM_RIGHT, MOVE_RECT = range(10)
+
     def __init__(self, editor, parent=None):
         super().__init__(parent)
         self.editor = editor
         self.image = None
         self.text_input = None # 텍스트 입력 위젯 참조 추가
+        self.dragging_handle = self.NO_HANDLE # 현재 드래그 중인 핸들 상태
+        self.drag_start_pos = None # 드래그 시작 마우스 위치
+        self.drag_start_rect = None # 드래그 시작 시 사각형 위치/크기
         
         # 배경 설정
         self.setStyleSheet("background-color: #282828;")
+        self.setMouseTracking(True) # 마우스 이동 이벤트 추적 활성화 (커서 변경 위해)
         self.setMinimumSize(600, 400)
         
     def setImage(self, image):
@@ -85,6 +95,10 @@ class ImageCanvas(QWidget):
         target_rect = QRect(QPoint(int(x), int(y)), scaled_size)
         
         painter.drawImage(target_rect, self.image)
+
+        # 자르기 영역 오버레이 그리기
+        if self.editor.current_tool == 'crop' and self.editor.crop_rect_widget:
+            self.draw_crop_overlay(painter, target_rect)
 
         # 하이라이트 오버레이 그리기 (오버레이 이미지가 있으면)
         if self.editor.highlight_overlay_image and not self.editor.highlight_overlay_image.isNull():
@@ -167,216 +181,277 @@ class ImageCanvas(QWidget):
     def mousePressEvent(self, event):
         print("[Canvas] mousePressEvent received")
         tool = self.editor.current_tool
-        if tool in ['mosaic', 'arrow', 'circle', 'rectangle', 'highlight', 'pen'] and event.button() == Qt.LeftButton:
-            print(f"[Canvas] Activating selection/drawing for tool: {tool}")
-            self.editor.is_selecting = True # 드래그/그리기 시작 플래그
-            if tool == 'highlight':
-                 # 오버레이 초기화
-                 if self.editor.highlight_overlay_image:
-                     self.editor.highlight_overlay_image.fill(Qt.transparent)
-                 self.editor.stroke_points = [event.pos()] # 점 리스트 시작 (위젯 좌표)
-            elif tool == 'pen':
-                # Undo 상태 저장 (스트로크 시작 시 한 번만)
-                self.editor.push_undo_state()
-                # 첫 점 기록 (위젯 좌표 및 이미지 좌표)
-                self.last_draw_point = event.pos()
-                self.last_img_draw_point = self.map_widget_to_image(self.last_draw_point)
-                # 첫 점을 바로 찍는 효과 (선택적)
-                if self.last_img_draw_point:
-                     self.editor.draw_pen_segment(self.last_img_draw_point, self.last_img_draw_point, self.editor.pen_color, self.editor.current_pen_thickness)
-                     self.update() # 첫 점 표시
+        
+        # 자르기 도구 핸들링
+        if tool == 'crop' and event.button() == Qt.LeftButton:
+            handle = self.get_handle_at(event.pos())
+            if handle != self.NO_HANDLE:
+                self.dragging_handle = handle
+                self.drag_start_pos = event.pos()
+                # QRect는 값 타입이므로 복사됨
+                self.drag_start_rect = self.editor.crop_rect_widget 
+                print(f"[Crop] Started dragging handle: {self.dragging_handle} from {self.drag_start_pos} with rect {self.drag_start_rect}")
+                event.accept() # 이벤트 처리됨
+                return # 다른 도구 로직 실행 방지
             else:
-                self.editor.selection_start_point = event.pos()
-                self.editor.selection_end_point = event.pos()
-            print(f"[Canvas] State after press: is_selecting={self.editor.is_selecting}, tool={self.editor.current_tool}")
+                print("[Crop] Clicked outside handles.")
+                # 여기서 자르기 취소 로직을 넣거나, 아무 동작 안 함
+                # self.editor.reset_tool_state() # 예: 클릭 시 취소
+                # event.accept()
+                # return
+
+        # 텍스트 도구 처리
         elif tool == 'text' and event.button() == Qt.LeftButton and self.editor.is_adding_text:
+            # ... (기존 텍스트 로직) ...
             self.create_text_input(event.pos())
             self.editor.is_adding_text = False # 한 번 클릭으로 입력 상자 생성 후 비활성화
-        super().mousePressEvent(event)
+            event.accept()
+            return
+            
+        # 기존 도형/펜 그리기 처리
+        elif tool in ['mosaic', 'arrow', 'circle', 'rectangle', 'highlight', 'pen'] and event.button() == Qt.LeftButton:
+            # ... (기존 그리기 로직) ...
+             print(f"[Canvas] Activating selection/drawing for tool: {tool}")
+             self.editor.is_selecting = True
+             if tool == 'highlight':
+                 if self.editor.highlight_overlay_image:
+                     self.editor.highlight_overlay_image.fill(Qt.transparent)
+                 self.editor.stroke_points = [event.pos()]
+             elif tool == 'pen':
+                 self.editor.push_undo_state()
+                 self.last_draw_point = event.pos()
+                 self.last_img_draw_point = self.map_widget_to_image(self.last_draw_point)
+                 if self.last_img_draw_point:
+                      self.editor.draw_pen_segment(self.last_img_draw_point, self.last_img_draw_point, self.editor.pen_color, self.editor.current_pen_thickness)
+                      self.update()
+             else:
+                 self.editor.selection_start_point = event.pos()
+                 self.editor.selection_end_point = event.pos()
+             print(f"[Canvas] State after press: is_selecting={self.editor.is_selecting}, tool={self.editor.current_tool}")
+             event.accept()
+             return
+
+        super().mousePressEvent(event) # 처리 안 된 이벤트는 부모로 전달
 
     def mouseMoveEvent(self, event):
         # print("[Canvas] mouseMoveEvent received")
-        if self.editor.is_selecting and self.editor.current_tool in ['mosaic', 'arrow', 'circle', 'rectangle', 'highlight', 'pen']:
-            if self.editor.current_tool == 'highlight':
-                self.editor.stroke_points.append(event.pos()) # 위젯 좌표 점 추가
-                
-                # 오버레이 클리어 및 전체 Polyline 다시 그리기
-                if self.editor.highlight_overlay_image and len(self.editor.stroke_points) > 1:
-                    self.editor.highlight_overlay_image.fill(Qt.transparent) # 오버레이 클리어
-                    painter = QPainter(self.editor.highlight_overlay_image)
-                    
-                    # 이미지 좌표로 변환된 점 리스트 생성
-                    img_points = [self.map_widget_to_image(p) for p in self.editor.stroke_points if p is not None]
-                    valid_img_points = [p for p in img_points if p is not None]
+        pos = event.pos()
+        
+        # 자르기 핸들 드래그 처리
+        if self.editor.current_tool == 'crop' and self.dragging_handle != self.NO_HANDLE:
+            if not self.drag_start_pos or not self.drag_start_rect:
+                 print("[WARN] Dragging crop handle without start info.")
+                 self.dragging_handle = self.NO_HANDLE # 상태 초기화
+                 return
+                 
+            delta = pos - self.drag_start_pos
+            new_rect = QRect(self.drag_start_rect) # 시작 사각형 복사
+            min_size = 10 # 최소 크기
 
-                    if len(valid_img_points) > 1:
-                        # draw_highlight_stroke와 동일한 펜 설정 사용
-                        pen = QPen(self.editor.highlight_color, 
-                                   self.editor.current_highlight_thickness, 
-                                   Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
-                        painter.setPen(pen)
-                        painter.setRenderHint(QPainter.Antialiasing)
-                        
-                        polygon = QPolygonF([QPointF(p) for p in valid_img_points])
-                        painter.drawPolyline(polygon)
-                    painter.end()
-                
-                self.update() # 미리보기 업데이트
-            elif self.editor.current_tool == 'pen':
-                current_pos = event.pos()
-                img_current = self.map_widget_to_image(current_pos)
-                # 이전 이미지 좌표와 현재 이미지 좌표가 모두 유효하면 선분 그리기
-                if self.last_img_draw_point and img_current:
-                    self.editor.draw_pen_segment(self.last_img_draw_point, img_current, self.editor.pen_color, self.editor.current_pen_thickness)
-                # 현재 점을 다음 시작점으로 업데이트
-                self.last_draw_point = current_pos
-                self.last_img_draw_point = img_current
-                # 변경된 이미지를 표시하도록 업데이트 요청
-                self.update()
-            else:
-                self.editor.selection_end_point = event.pos()
-                self.update() # 도형 미리보기 업데이트
-        super().mouseMoveEvent(event)
+            # 핸들 유형에 따라 사각형 조절
+            if self.dragging_handle == self.MOVE_RECT:
+                new_rect.translate(delta)
+            elif self.dragging_handle == self.TOP_LEFT:
+                new_rect.setTopLeft(self.drag_start_rect.topLeft() + delta)
+            elif self.dragging_handle == self.TOP_MIDDLE:
+                new_rect.setTop(self.drag_start_rect.top() + delta.y())
+            elif self.dragging_handle == self.TOP_RIGHT:
+                new_rect.setTopRight(self.drag_start_rect.topRight() + delta)
+            elif self.dragging_handle == self.MIDDLE_LEFT:
+                new_rect.setLeft(self.drag_start_rect.left() + delta.x())
+            elif self.dragging_handle == self.MIDDLE_RIGHT:
+                new_rect.setRight(self.drag_start_rect.right() + delta.x())
+            elif self.dragging_handle == self.BOTTOM_LEFT:
+                new_rect.setBottomLeft(self.drag_start_rect.bottomLeft() + delta)
+            elif self.dragging_handle == self.BOTTOM_MIDDLE:
+                new_rect.setBottom(self.drag_start_rect.bottom() + delta.y())
+            elif self.dragging_handle == self.BOTTOM_RIGHT:
+                new_rect.setBottomRight(self.drag_start_rect.bottomRight() + delta)
+
+            # 유효성 검사 및 최소 크기 적용
+            # normalized()는 좌상단/우하단이 뒤바뀐 경우를 처리
+            valid_rect = new_rect.normalized()
+            if valid_rect.width() < min_size:
+                # 너비 조정 (어느 쪽 핸들을 움직였는지에 따라 다름)
+                if self.dragging_handle in [self.TOP_LEFT, self.MIDDLE_LEFT, self.BOTTOM_LEFT]:
+                    valid_rect.setLeft(valid_rect.right() - min_size)
+                else:
+                    valid_rect.setRight(valid_rect.left() + min_size)
+            if valid_rect.height() < min_size:
+                # 높이 조정
+                if self.dragging_handle in [self.TOP_LEFT, self.TOP_MIDDLE, self.TOP_RIGHT]:
+                    valid_rect.setTop(valid_rect.bottom() - min_size)
+                else:
+                    valid_rect.setBottom(valid_rect.top() + min_size)
+            
+            # 캔버스 경계 내에 있도록 제한 (선택적, 더 복잡해짐)
+            # valid_rect = valid_rect.intersected(self.rect().adjusted(1,1,-1,-1))
+            
+            self.editor.crop_rect_widget = valid_rect
+            self.update_cursor(pos) # 커서 모양 업데이트
+            self.update() # 캔버스 다시 그리기
+            event.accept()
+            return
+        # 자르기 모드에서 핸들 위에 마우스 올렸을 때 커서 변경
+        elif self.editor.current_tool == 'crop':
+            self.update_cursor(pos)
+            
+        # 기존 그리기 처리 (펜/하이라이트 등)
+        elif self.editor.is_selecting and self.editor.current_tool in ['mosaic', 'arrow', 'circle', 'rectangle', 'highlight', 'pen']:
+             # ... (기존 그리기 로직) ...
+             if self.editor.current_tool == 'highlight':
+                 self.editor.stroke_points.append(event.pos())
+                 if self.editor.highlight_overlay_image and len(self.editor.stroke_points) > 1:
+                     self.editor.highlight_overlay_image.fill(Qt.transparent)
+                     painter = QPainter(self.editor.highlight_overlay_image)
+                     img_points = [self.map_widget_to_image(p) for p in self.editor.stroke_points if p is not None]
+                     valid_img_points = [p for p in img_points if p is not None]
+                     if len(valid_img_points) > 1:
+                         pen = QPen(self.editor.highlight_color, self.editor.current_highlight_thickness, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+                         painter.setPen(pen)
+                         painter.setRenderHint(QPainter.Antialiasing)
+                         polygon = QPolygonF([QPointF(p) for p in valid_img_points])
+                         painter.drawPolyline(polygon)
+                     painter.end()
+                 self.update()
+             elif self.editor.current_tool == 'pen':
+                 current_pos = event.pos()
+                 img_current = self.map_widget_to_image(current_pos)
+                 if self.last_img_draw_point and img_current:
+                     self.editor.draw_pen_segment(self.last_img_draw_point, img_current, self.editor.pen_color, self.editor.current_pen_thickness)
+                 self.last_draw_point = current_pos
+                 self.last_img_draw_point = img_current
+                 self.update()
+             else:
+                 self.editor.selection_end_point = event.pos()
+                 self.update()
+             event.accept()
+             return
+
+        super().mouseMoveEvent(event) # 처리 안 된 이벤트는 부모로 전달
 
     def mouseReleaseEvent(self, event):
         print("[Canvas] mouseReleaseEvent received")
+        
+        # 자르기 핸들 드래그 종료 처리
+        if self.editor.current_tool == 'crop' and self.dragging_handle != self.NO_HANDLE:
+            print(f"[Crop] Finished dragging handle: {self.dragging_handle}. Final rect: {self.editor.crop_rect_widget}")
+            self.dragging_handle = self.NO_HANDLE
+            self.drag_start_pos = None
+            self.drag_start_rect = None
+            self.update_cursor(event.pos()) # 최종 위치 기준으로 커서 업데이트
+            event.accept()
+            return
+            
         # 텍스트 입력 중에는 release 이벤트 무시 (입력 완료는 QLineEdit에서 처리)
-        if self.editor.current_tool == 'text' and self.text_input and self.text_input.isVisible():
+        elif self.editor.current_tool == 'text' and self.text_input and self.text_input.isVisible():
+             # ... (기존 텍스트 로직) ...
              print("[Canvas] Mouse release ignored during text input.")
              super().mouseReleaseEvent(event)
              return
 
-        if self.editor.is_selecting and event.button() == Qt.LeftButton and self.editor.current_tool in ['mosaic', 'arrow', 'circle', 'rectangle', 'highlight', 'pen']:
-            tool = self.editor.current_tool
-            self.editor.is_selecting = False # 여기서 플래그 해제
-            
-            if tool == 'highlight':
-                # 마지막 점 추가
-                if hasattr(self.editor, 'stroke_points'):
-                    self.editor.stroke_points.append(event.pos())
-                    if len(self.editor.stroke_points) > 1:
-                        img_points = [self.map_widget_to_image(p) for p in self.editor.stroke_points if p is not None]
-                        valid_img_points = [p for p in img_points if p is not None]
-                        
-                        if len(valid_img_points) > 1:
-                            print(f"[MouseRelease] Calling draw_highlight_stroke on edited_image")
-                            self.editor.push_undo_state()
-                            self.editor.draw_highlight_stroke(valid_img_points, self.editor.highlight_color, self.editor.current_highlight_thickness)
-                            # self.editor.update_canvas() # 아래쪽 공통 update에서 처리
-                        else: print("Highlight stroke too short or invalid.")
-                    else: print("Highlight stroke too short.")
-                    # 오버레이 클리어
-                    if self.editor.highlight_overlay_image:
-                        self.editor.highlight_overlay_image.fill(Qt.transparent)
-            elif tool == 'pen':
-                # 펜은 Move에서 이미 그리므로 Release에서는 작업 없음
-                print("[MouseRelease] Pen drawing finished.")
-            else:
-                # 기존 도형/모자이크 로직
-                start_widget = self.editor.selection_start_point
-                end_widget = event.pos() 
-    
-                if start_widget and end_widget:
-                    print(f"[MouseRelease] Tool: {tool}, Start: {start_widget}, End: {end_widget}") # 디버그 출력
-                    img_start = self.map_widget_to_image(start_widget)
-                    img_end = self.map_widget_to_image(end_widget)
-                    print(f"[MouseRelease] Mapped Coords: Start: {img_start}, End: {img_end}") # 디버그 출력
-    
-                    if img_start and img_end:
-                        if tool == 'mosaic':
-                            selection_rect_widget = QRect(start_widget, end_widget).normalized()
-                            img_rect = QRect(img_start, img_end).normalized()
-                            if img_rect.width() > 0 and img_rect.height() > 0:
-                                print("[MouseRelease] Applying mosaic...") # 디버그 출력
-                                self.editor.push_undo_state() 
-                                self.editor.apply_mosaic(img_rect, self.editor.mosaic_level)
-                                self.editor.update_canvas()
-                            else:
-                                print("Mosaic selection too small.")
-                        elif tool == 'arrow':
-                            if img_start != img_end:
-                                 print(f"[MouseRelease] Calling draw_arrow: {img_start} -> {img_end}, Color: {self.editor.arrow_color.name()}, Thickness: {self.editor.current_arrow_thickness}") # 두께 정보 추가
+        # 기존 도형/펜 그리기 종료 처리
+        elif self.editor.is_selecting and event.button() == Qt.LeftButton and self.editor.current_tool in ['mosaic', 'arrow', 'circle', 'rectangle', 'highlight', 'pen']:
+             # ... (기존 그리기 로직) ...
+             tool = self.editor.current_tool
+             self.editor.is_selecting = False
+             if tool == 'highlight':
+                 if hasattr(self.editor, 'stroke_points'):
+                     self.editor.stroke_points.append(event.pos())
+                     if len(self.editor.stroke_points) > 1:
+                         img_points = [self.map_widget_to_image(p) for p in self.editor.stroke_points if p is not None]
+                         valid_img_points = [p for p in img_points if p is not None]
+                         if len(valid_img_points) > 1:
+                             print(f"[MouseRelease] Calling draw_highlight_stroke on edited_image")
+                             self.editor.push_undo_state()
+                             self.editor.draw_highlight_stroke(valid_img_points, self.editor.highlight_color, self.editor.current_highlight_thickness)
+                         else: print("Highlight stroke too short or invalid.")
+                     else: print("Highlight stroke too short.")
+                     if self.editor.highlight_overlay_image:
+                         self.editor.highlight_overlay_image.fill(Qt.transparent)
+             elif tool == 'pen':
+                 print("[MouseRelease] Pen drawing finished.")
+             else:
+                 start_widget = self.editor.selection_start_point
+                 end_widget = event.pos()
+                 if start_widget and end_widget:
+                     print(f"[MouseRelease] Tool: {tool}, Start: {start_widget}, End: {end_widget}")
+                     img_start = self.map_widget_to_image(start_widget)
+                     img_end = self.map_widget_to_image(end_widget)
+                     print(f"[MouseRelease] Mapped Coords: Start: {img_start}, End: {img_end}")
+                     if img_start and img_end:
+                         if tool == 'mosaic':
+                             selection_rect_widget = QRect(start_widget, end_widget).normalized()
+                             img_rect = QRect(img_start, img_end).normalized()
+                             if img_rect.width() > 0 and img_rect.height() > 0:
+                                 print("[MouseRelease] Applying mosaic...")
                                  self.editor.push_undo_state()
-                                 # draw_arrow 호출 시 현재 저장된 두께 사용
-                                 self.editor.draw_arrow(img_start, img_end, self.editor.arrow_color, self.editor.current_arrow_thickness) 
+                                 self.editor.apply_mosaic(img_rect, self.editor.mosaic_level)
                                  self.editor.update_canvas()
-                            else:
-                                 print("Arrow start and end points are the same.")
-                        elif tool == 'circle': # 원 그리기 로직 추가
-                            img_rect = QRect(img_start, img_end).normalized()
-                            if img_rect.width() > 0 and img_rect.height() > 0:
-                                print(f"[MouseRelease] Calling draw_circle: Rect: {img_rect}, Color: {self.editor.circle_color.name()}, Thickness: {self.editor.current_circle_thickness}")
-                                self.editor.push_undo_state()
-                                self.editor.draw_circle(img_rect, self.editor.circle_color, self.editor.current_circle_thickness)
-                                self.editor.update_canvas()
-                            else:
-                                print("Circle selection too small.")
-                        elif tool == 'rectangle': # 사각형 그리기 로직 추가
-                            img_rect = QRect(img_start, img_end).normalized()
-                            if img_rect.width() > 0 and img_rect.height() > 0:
-                                print(f"[MouseRelease] Calling draw_rectangle: Rect: {img_rect}, Color: {self.editor.rectangle_color.name()}, Thickness: {self.editor.current_rectangle_thickness}")
-                                self.editor.push_undo_state()
-                                self.editor.draw_rectangle(img_rect, self.editor.rectangle_color, self.editor.current_rectangle_thickness)
-                                self.editor.update_canvas()
-                            else:
-                                print("Rectangle selection too small.")
+                             else:
+                                 print("Mosaic selection too small.")
+                         elif tool == 'arrow':
+                             if img_start != img_end:
+                                  print(f"[MouseRelease] Calling draw_arrow: {img_start} -> {img_end}, Color: {self.editor.arrow_color.name()}, Thickness: {self.editor.current_arrow_thickness}")
+                                  self.editor.push_undo_state()
+                                  self.editor.draw_arrow(img_start, img_end, self.editor.arrow_color, self.editor.current_arrow_thickness)
+                                  self.editor.update_canvas()
+                             else:
+                                  print("Arrow start and end points are the same.")
+                         elif tool == 'circle':
+                             img_rect = QRect(img_start, img_end).normalized()
+                             if img_rect.width() > 0 and img_rect.height() > 0:
+                                 print(f"[MouseRelease] Calling draw_circle: Rect: {img_rect}, Color: {self.editor.circle_color.name()}, Thickness: {self.editor.current_circle_thickness}")
+                                 self.editor.push_undo_state()
+                                 self.editor.draw_circle(img_rect, self.editor.circle_color, self.editor.current_circle_thickness)
+                                 self.editor.update_canvas()
+                             else:
+                                 print("Circle selection too small.")
+                         elif tool == 'rectangle': 
+                             img_rect = QRect(img_start, img_end).normalized()
+                             if img_rect.width() > 0 and img_rect.height() > 0:
+                                 print(f"[MouseRelease] Calling draw_rectangle: Rect: {img_rect}, Color: {self.editor.rectangle_color.name()}, Thickness: {self.editor.current_rectangle_thickness}")
+                                 self.editor.push_undo_state()
+                                 self.editor.draw_rectangle(img_rect, self.editor.rectangle_color, self.editor.current_rectangle_thickness)
+                                 self.editor.update_canvas()
+                             else:
+                                 print("Rectangle selection too small.")
+             print("[MouseRelease] Resetting state and cursor.")
+             self.editor.selection_start_point = None
+             self.editor.selection_end_point = None
+             if hasattr(self.editor, 'stroke_points'): self.editor.stroke_points = []
+             self.last_draw_point = None       
+             self.last_img_draw_point = None   
+             if tool in ['arrow', 'mosaic', 'circle', 'rectangle', 'highlight', 'pen']: 
+                  self.setCursor(Qt.ArrowCursor) 
+             self.editor.update_undo_redo_actions()
+             self.update()
+             event.accept()
+             return
 
-            # 공통 상태 초기화 및 커서 복원
-            print("[MouseRelease] Resetting state and cursor.")
-            self.editor.selection_start_point = None
-            self.editor.selection_end_point = None
-            if hasattr(self.editor, 'stroke_points'): self.editor.stroke_points = []
-            self.last_draw_point = None        # 펜/하이라이트용 변수 초기화
-            self.last_img_draw_point = None    # 펜/하이라이트용 변수 초기화
-            if tool in ['arrow', 'mosaic', 'circle', 'rectangle', 'highlight', 'pen']: 
-                 self.setCursor(Qt.ArrowCursor) 
-            self.editor.update_undo_redo_actions()
-            self.update() # 최종 상태 반영 (오버레이 제거 등)
+        super().mouseReleaseEvent(event) # 처리 안 된 이벤트는 부모로 전달
+        
+    def update_cursor(self, pos):
+        """마우스 위치에 따라 커서 모양 업데이트 (자르기 모드)"""
+        if self.editor.current_tool != 'crop':
+             self.setCursor(Qt.ArrowCursor) # 기본 커서
+             return
 
-        super().mouseReleaseEvent(event)
-
-    def create_text_input(self, position):
-        """지정된 위치에 QLineEdit 생성 및 표시"""
-        if self.text_input is None:
-            self.text_input = QLineEdit(self)
-            self.text_input.returnPressed.connect(self.finish_text_input) # Enter 키 연결
-            # 포커스 아웃 시에도 입력 완료 처리 (선택적)
-            # self.text_input.editingFinished.connect(self.finish_text_input) 
-
-        # 이전 입력 내용 클리어
-        self.text_input.clear()
-
-        # 폰트 설정 (에디터에서 가져옴)
-        font = QFont()
-        font.setPixelSize(self.editor.text_font_size) # 픽셀 크기로 설정
-        self.text_input.setFont(font)
-        print(f"[DEBUG] Setting QLineEdit font size to {self.editor.text_font_size} pixels.") # 로그 추가
-
-        # 스타일 설정 (색상, 배경 등)
-        text_color = self.editor.text_color.name()
-        # 배경을 투명하게 설정하고 테두리 색상을 텍스트 색상과 동일하게 설정
-        self.text_input.setStyleSheet(f"""
-            QLineEdit {{
-                color: {text_color};
-                background-color: transparent; /* 배경 투명 */
-                border: 1px solid {text_color}; /* 테두리 색상 변경 */
-                padding: 2px;
-            }}
-        """)
-
-        # 크기 자동 조절 및 위치 설정
-        self.text_input.adjustSize() # 내용에 맞게 크기 조절 시도
-        # 클릭 위치를 입력 상자의 좌상단 기준으로 설정
-        input_pos = position 
-        # 캔버스 경계 밖으로 나가지 않도록 조정
-        input_pos.setX(max(0, min(input_pos.x(), self.width() - self.text_input.width())))
-        input_pos.setY(max(0, min(input_pos.y(), self.height() - self.text_input.height())))
-        self.text_input.move(input_pos)
-
-        self.text_input.show()
-        self.text_input.setFocus()
-        print(f"[Canvas] Text input created at {input_pos} with font size {self.editor.text_font_size}")
-
+        handle = self.get_handle_at(pos)
+        
+        if handle == self.TOP_LEFT or handle == self.BOTTOM_RIGHT:
+            self.setCursor(Qt.SizeFDiagCursor)
+        elif handle == self.TOP_RIGHT or handle == self.BOTTOM_LEFT:
+            self.setCursor(Qt.SizeBDiagCursor)
+        elif handle == self.TOP_MIDDLE or handle == self.BOTTOM_MIDDLE:
+            self.setCursor(Qt.SizeVerCursor)
+        elif handle == self.MIDDLE_LEFT or handle == self.MIDDLE_RIGHT:
+            self.setCursor(Qt.SizeHorCursor)
+        elif handle == self.MOVE_RECT:
+            self.setCursor(Qt.SizeAllCursor)
+        else:
+            self.setCursor(Qt.ArrowCursor)
+            
     def finish_text_input(self):
         """텍스트 입력 완료 처리"""
         print("[DEBUG] finish_text_input called")
@@ -445,8 +520,7 @@ class ImageCanvas(QWidget):
 
             except Exception as e:
                 print(f"[ERROR] Exception occurred in finish_text_input: {e}")
-                import traceback
-                traceback.print_exc() # 콘솔에 상세 스택 트레이스 출력
+                traceback.print_exc()
                 # 에러 발생 시에도 커서 등은 초기화 시도
                 try:
                     self.text_input.hide()
@@ -456,6 +530,73 @@ class ImageCanvas(QWidget):
                     print(f"[ERROR] Exception during error handling in finish_text_input: {inner_e}")
         else:
             print("[DEBUG] finish_text_input called but text_input is None or not visible.")
+
+    def get_handle_at(self, pos): 
+        """주어진 위치에 어떤 핸들이 있는지 확인"""
+        if not self.editor.crop_rect_widget: return self.NO_HANDLE
+
+        r = self.editor.crop_rect_widget
+        handles = self.get_handle_rects(r)
+
+        if handles[self.TOP_LEFT].contains(pos): return self.TOP_LEFT
+        if handles[self.TOP_MIDDLE].contains(pos): return self.TOP_MIDDLE
+        if handles[self.TOP_RIGHT].contains(pos): return self.TOP_RIGHT
+        if handles[self.MIDDLE_LEFT].contains(pos): return self.MIDDLE_LEFT
+        if handles[self.MIDDLE_RIGHT].contains(pos): return self.MIDDLE_RIGHT
+        if handles[self.BOTTOM_LEFT].contains(pos): return self.BOTTOM_LEFT
+        if handles[self.BOTTOM_MIDDLE].contains(pos): return self.BOTTOM_MIDDLE
+        if handles[self.BOTTOM_RIGHT].contains(pos): return self.BOTTOM_RIGHT
+        if r.contains(pos): return self.MOVE_RECT # 핸들이 아닌 영역 내부 클릭 시
+        
+        return self.NO_HANDLE
+
+    def get_handle_rects(self, rect):
+        """주어진 사각형의 핸들 위치(QRect) 리스트 반환"""
+        x, y, w, h = rect.x(), rect.y(), rect.width(), rect.height()
+        cx = x + w // 2
+        cy = y + h // 2
+        
+        # 핸들 사각형 생성 (중심점 기준)
+        return {
+            self.TOP_LEFT: QRect(x - self.HANDLE_HALF, y - self.HANDLE_HALF, self.HANDLE_SIZE, self.HANDLE_SIZE),
+            self.TOP_MIDDLE: QRect(cx - self.HANDLE_HALF, y - self.HANDLE_HALF, self.HANDLE_SIZE, self.HANDLE_SIZE),
+            self.TOP_RIGHT: QRect(x + w - self.HANDLE_HALF, y - self.HANDLE_HALF, self.HANDLE_SIZE, self.HANDLE_SIZE),
+            self.MIDDLE_LEFT: QRect(x - self.HANDLE_HALF, cy - self.HANDLE_HALF, self.HANDLE_SIZE, self.HANDLE_SIZE),
+            self.MIDDLE_RIGHT: QRect(x + w - self.HANDLE_HALF, cy - self.HANDLE_HALF, self.HANDLE_SIZE, self.HANDLE_SIZE),
+            self.BOTTOM_LEFT: QRect(x - self.HANDLE_HALF, y + h - self.HANDLE_HALF, self.HANDLE_SIZE, self.HANDLE_SIZE),
+            self.BOTTOM_MIDDLE: QRect(cx - self.HANDLE_HALF, y + h - self.HANDLE_HALF, self.HANDLE_SIZE, self.HANDLE_SIZE),
+            self.BOTTOM_RIGHT: QRect(x + w - self.HANDLE_HALF, y + h - self.HANDLE_HALF, self.HANDLE_SIZE, self.HANDLE_SIZE)
+        }
+
+    def draw_crop_overlay(self, painter, image_display_rect):
+        """자르기 영역 오버레이 (반투명 배경, 선택 영역, 핸들) 그리기"""
+        try:
+            crop_rect = self.editor.crop_rect_widget
+            if not crop_rect: return # 자르기 영역 없으면 종료
+            
+            # 영역 밖 반투명 어둡게 처리
+            painter.save()
+            path = QPainterPath()
+            path.addRect(QRectF(self.rect())) # 전체 캔버스 영역
+            path.addRect(QRectF(crop_rect)) # 자르기 영역 제외
+            painter.setBrush(QColor(0, 0, 0, 128)) # 반투명 검정
+            painter.setPen(Qt.NoPen)
+            painter.drawPath(path)
+            painter.restore()
+
+            # 자르기 영역 테두리
+            painter.setPen(QPen(Qt.white, 1, Qt.DashLine)) 
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRect(crop_rect)
+
+            # 조절 핸들 그리기
+            painter.setPen(Qt.white)
+            painter.setBrush(Qt.white)
+            for handle_rect in self.get_handle_rects(crop_rect).values():
+                painter.drawEllipse(handle_rect)
+        except Exception as e:
+            print(f"[ERROR] Exception in draw_crop_overlay: {e}")
+            traceback.print_exc()
 
 class ImageEditor(QMainWindow):
     """이미지 편집 기능을 제공하는 창"""
@@ -483,6 +624,7 @@ class ImageEditor(QMainWindow):
         self.selection_start_point = None
         self.selection_end_point = None
         self.is_adding_text = False # 텍스트 추가 상태 플래그
+        self.crop_rect_widget = None # 자르기 영역 위젯 좌표 (QRect)
         
         # 화살표 색상/두께 변수
         self.arrow_color = QColor(Qt.red) 
@@ -657,9 +799,10 @@ class ImageEditor(QMainWindow):
         select_action.setToolTip("Select area")
         self.toolbar.addAction(select_action)
         
-        # 자르기 버튼
+        # 자르기 버튼 (activate_crop_tool 연결)
         crop_action = QAction(QIcon("assets/crop_icon.svg"), "Crop", self)
-        crop_action.setToolTip("Crop image")
+        crop_action.setToolTip("Crop image (Press Enter to confirm)")
+        crop_action.triggered.connect(self.activate_crop_tool) # 시그널 연결
         self.toolbar.addAction(crop_action)
         
         # 텍스트 추가 버튼 (activate_text_tool 연결)
@@ -942,6 +1085,170 @@ class ImageEditor(QMainWindow):
             self.current_tool = None
             self.image_canvas.setCursor(Qt.ArrowCursor)
             self.is_adding_text = False
+
+    def activate_crop_tool(self):
+        """자르기 도구 활성화"""
+        print("[DEBUG] activate_crop_tool called")
+        try:
+            if not self.edited_image or self.edited_image.isNull(): 
+                print("[DEBUG] No image loaded, cannot activate crop tool.")
+                return
+            
+            self.current_tool = 'crop'
+            print("[DEBUG] Crop tool set.")
+            # 초기 자르기 영역 설정 (캔버스에 표시되는 이미지 영역 기준)
+            # ImageCanvas의 paintEvent에서 사용된 target_rect 계산 로직 활용
+            img_size = self.edited_image.size()
+            widget_rect = self.image_canvas.rect()
+            print(f"[DEBUG] Image size: {img_size}, Widget rect: {widget_rect}")
+            if widget_rect.width() <= 0 or widget_rect.height() <= 0:
+                print("[ERROR] Canvas widget size is invalid.")
+                self.current_tool = None # 도구 설정 취소
+                return
+                
+            scaled_size = img_size.scaled(widget_rect.size(), Qt.KeepAspectRatio)
+            print(f"[DEBUG] Scaled image size: {scaled_size}")
+            if scaled_size.width() <= 0 or scaled_size.height() <= 0:
+                 print("[ERROR] Scaled image size is invalid.")
+                 self.current_tool = None
+                 return
+                 
+            x = (widget_rect.width() - scaled_size.width()) / 2
+            y = (widget_rect.height() - scaled_size.height()) / 2
+            # QRect 생성 시 정수 좌표 사용
+            initial_crop_rect = QRect(int(x), int(y), scaled_size.width(), scaled_size.height())
+            print(f"[DEBUG] Calculated initial rect (before adjust): {initial_crop_rect}")
+            
+            # 테두리 안쪽으로 약간 줄여서 시작 (선택적)
+            initial_crop_rect.adjust(5, 5, -5, -5)
+            print(f"[DEBUG] Adjusted initial rect: {initial_crop_rect}")
+
+            # 생성된 사각형이 유효한지 한번 더 확인
+            if not initial_crop_rect.isValid() or initial_crop_rect.width() <= 0 or initial_crop_rect.height() <= 0:
+                 print(f"[ERROR] Initial crop rectangle is invalid after creation/adjustment.")
+                 self.current_tool = None
+                 return
+                 
+            self.crop_rect_widget = initial_crop_rect
+            print(f"Crop tool activated. Initial rect set: {self.crop_rect_widget}")
+            self.image_canvas.setCursor(Qt.ArrowCursor) # 핸들 위에서 커서 변경 예정
+            self.is_selecting = False
+            self.is_adding_text = False
+            self.image_canvas.update() # 오버레이 표시
+            print("[DEBUG] Crop overlay update requested.")
+        except Exception as e:
+            print(f"[ERROR] Exception in activate_crop_tool: {e}")
+            traceback.print_exc()
+            self.current_tool = None # 에러 시 도구 상태 초기화
+
+    def apply_crop(self):
+        """현재 crop_rect_widget 기준으로 이미지 자르기 수행"""
+        print("[DEBUG] apply_crop called")
+        try:
+            if self.current_tool != 'crop' or not self.crop_rect_widget or not self.edited_image:
+                print("[ApplyCrop] Crop tool not active or no crop rect/image.")
+                return
+
+            print(f"[ApplyCrop] Applying crop with widget rect: {self.crop_rect_widget}")
+            
+            # 위젯 좌표를 이미지 원본 좌표로 변환
+            print("[DEBUG] Calling map_widget_rect_to_image_rect")
+            img_rect = self.map_widget_rect_to_image_rect(self.crop_rect_widget)
+            print(f"[DEBUG] map_widget_rect_to_image_rect returned: {img_rect}")
+            
+            if not img_rect or not img_rect.isValid() or img_rect.width() <= 0 or img_rect.height() <= 0:
+                print("[ApplyCrop] Invalid image crop rectangle after mapping.")
+                self.reset_tool_state() # 상태 초기화
+                return
+                
+            # 이미지 경계와 교차하는 유효한 영역만 사용
+            print("[DEBUG] Calculating intersection with image bounds")
+            valid_img_rect = img_rect.intersected(self.edited_image.rect())
+            print(f"[DEBUG] Valid intersected image rect: {valid_img_rect}")
+            if not valid_img_rect.isValid() or valid_img_rect.width() <= 0 or valid_img_rect.height() <= 0:
+                print("[ApplyCrop] Crop rectangle is outside image bounds.")
+                self.reset_tool_state()
+                return
+
+            print(f"[ApplyCrop] Cropping to image rect: {valid_img_rect}")
+            # try...except 블록을 중첩하여 자르기 자체의 오류 처리
+            try:
+                self.push_undo_state() # 자르기 전 상태 저장
+                print("[DEBUG] Calling edited_image.copy()")
+                cropped_image = self.edited_image.copy(valid_img_rect)
+                print("[DEBUG] edited_image.copy() finished")
+                self.edited_image = cropped_image
+                self.original_image = QImage(self.edited_image) # 자른 후에는 원본도 업데이트 (선택적)
+                print("[DEBUG] Calling update_canvas after crop")
+                self.update_canvas()
+                print("[DEBUG] Calling initialize_overlay after crop")
+                self.initialize_overlay() # 오버레이 이미지 크기 재설정
+                print("[ApplyCrop] Crop successful.")
+            except Exception as e:
+                print(f"[ApplyCrop] Error during cropping: {e}")
+                traceback.print_exc()
+                # 에러 발생 시 undo 스택 복구 시도 (주의 필요)
+                print("[DEBUG] Attempting to restore undo stack after crop error")
+                if self.undo_stack: self.undo_stack.pop()
+            
+            print("[DEBUG] Calling reset_tool_state after apply_crop")
+            self.reset_tool_state()
+            print("[DEBUG] Calling update_undo_redo_actions after apply_crop")
+            self.update_undo_redo_actions()
+        except Exception as e:
+            print(f"[ERROR] Exception in apply_crop outer block: {e}")
+            traceback.print_exc()
+            self.reset_tool_state() # 외부 블록 에러 시에도 초기화
+
+    def map_widget_rect_to_image_rect(self, widget_rect):
+        """위젯 좌표계의 QRect를 이미지 원본 좌표계의 QRect로 변환"""
+        print(f"[DEBUG] map_widget_rect_to_image_rect called with widget_rect: {widget_rect}")
+        try:
+            if not self.image_canvas or not self.image_canvas.image or self.image_canvas.image.isNull():
+                print("[ERROR] Cannot map rect, canvas or image is invalid.")
+                return None
+
+            # 좌상단과 우하단 점을 변환
+            top_left_widget = widget_rect.topLeft()
+            bottom_right_widget = widget_rect.bottomRight()
+            print(f"[DEBUG] Mapping top-left: {top_left_widget}, bottom-right: {bottom_right_widget}")
+
+            top_left_img = self.image_canvas.map_widget_to_image(top_left_widget)
+            bottom_right_img = self.image_canvas.map_widget_to_image(bottom_right_widget)
+            print(f"[DEBUG] Mapped top-left: {top_left_img}, bottom-right: {bottom_right_img}")
+
+            if top_left_img and bottom_right_img:
+                # 변환된 점으로 QRect 생성 (정규화 필요 없음, map_widget_to_image에서 경계 처리됨)
+                img_rect = QRect(top_left_img, bottom_right_img).normalized()
+                print(f"[DEBUG] Calculated image rect: {img_rect}")
+                return img_rect
+            else:
+                print("[MapRect] Failed to map one or both corner points.")
+                return None
+        except Exception as e:
+            print(f"[ERROR] Exception in map_widget_rect_to_image_rect: {e}")
+            traceback.print_exc()
+            return None
+            
+    def reset_tool_state(self):
+         """현재 도구 상태 초기화 (자르기 완료/취소 후)"""
+         self.current_tool = None
+         self.crop_rect_widget = None
+         self.image_canvas.setCursor(Qt.ArrowCursor)
+         self.image_canvas.dragging_handle = ImageCanvas.NO_HANDLE
+         self.image_canvas.update()
+
+    def keyPressEvent(self, event):
+        """키 입력 이벤트 처리 (Enter 키로 자르기 확인)"""
+        try:
+            if self.current_tool == 'crop' and event.key() in (Qt.Key_Return, Qt.Key_Enter):
+                print("[DEBUG] Enter key pressed in crop mode.")
+                self.apply_crop()
+            else:
+                super().keyPressEvent(event) # 다른 키 이벤트는 기본 처리
+        except Exception as e:
+            print(f"[ERROR] Exception in keyPressEvent: {e}")
+            traceback.print_exc()
 
     def load_image(self, image_path):
         """이미지 로드 및 표시, Undo 스택 초기화"""
