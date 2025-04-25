@@ -202,11 +202,27 @@ class ImageCanvas(QWidget):
 
         # 텍스트 도구 처리
         elif tool == 'text' and event.button() == Qt.LeftButton and self.editor.is_adding_text:
-            # ... (기존 텍스트 로직) ...
-            self.create_text_input(event.pos())
-            self.editor.is_adding_text = False # 한 번 클릭으로 입력 상자 생성 후 비활성화
-            event.accept()
-            return
+            print(f"[DEBUG] mousePressEvent: Text tool active (is_adding_text={self.editor.is_adding_text})")
+            try:
+                # ... (기존 텍스트 로직) ...
+                self.create_text_input(event.pos())
+                self.editor.is_adding_text = False # 한 번 클릭으로 입력 상자 생성 후 비활성화
+                print("[DEBUG] mousePressEvent: Text input created and is_adding_text set to False.")
+                event.accept()
+                return
+            except Exception as e:
+                print(f"[ERROR] Exception during text input creation in mousePressEvent: {e}")
+                traceback.print_exc()
+                # 오류 발생 시 상태 초기화 시도
+                try:
+                    self.editor.reset_tool_state() # reset_tool_state가 있다면 사용
+                except AttributeError:
+                    # reset_tool_state가 없으면 기본 초기화
+                    self.editor.current_tool = None
+                    self.editor.is_adding_text = False
+                    self.setCursor(Qt.ArrowCursor)
+                event.accept()
+                return
             
         # 기존 도형/펜 그리기 처리
         elif tool in ['mosaic', 'arrow', 'circle', 'rectangle', 'highlight', 'pen'] and event.button() == Qt.LeftButton:
@@ -451,6 +467,48 @@ class ImageCanvas(QWidget):
             self.setCursor(Qt.SizeAllCursor)
         else:
             self.setCursor(Qt.ArrowCursor)
+            
+    def create_text_input(self, position):
+        """지정된 위치에 QLineEdit 생성 및 표시"""
+        if self.text_input is None:
+            self.text_input = QLineEdit(self)
+            self.text_input.returnPressed.connect(self.finish_text_input) # Enter 키 연결
+            # 포커스 아웃 시에도 입력 완료 처리 (선택적)
+            # self.text_input.editingFinished.connect(self.finish_text_input) 
+
+        # 이전 입력 내용 클리어
+        self.text_input.clear()
+
+        # 폰트 설정 (에디터에서 가져옴)
+        font = QFont()
+        font.setPixelSize(self.editor.text_font_size) # 픽셀 크기로 설정
+        self.text_input.setFont(font)
+        print(f"[DEBUG] Setting QLineEdit font size to {self.editor.text_font_size} pixels.") # 로그 추가
+
+        # 스타일 설정 (색상, 배경 등)
+        text_color = self.editor.text_color.name()
+        # 배경을 투명하게 설정하고 테두리 색상을 텍스트 색상과 동일하게 설정
+        self.text_input.setStyleSheet(f"""
+            QLineEdit {{
+                color: {text_color};
+                background-color: transparent; /* 배경 투명 */
+                border: 1px solid {text_color}; /* 테두리 색상 변경 */
+                padding: 2px;
+            }}
+        """)
+
+        # 크기 자동 조절 및 위치 설정
+        self.text_input.adjustSize() # 내용에 맞게 크기 조절 시도
+        # 클릭 위치를 입력 상자의 좌상단 기준으로 설정
+        input_pos = position 
+        # 캔버스 경계 밖으로 나가지 않도록 조정
+        input_pos.setX(max(0, min(input_pos.x(), self.width() - self.text_input.width())))
+        input_pos.setY(max(0, min(input_pos.y(), self.height() - self.text_input.height())))
+        self.text_input.move(input_pos)
+
+        self.text_input.show()
+        self.text_input.setFocus()
+        print(f"[Canvas] Text input created at {input_pos} with font size {self.editor.text_font_size}")
             
     def finish_text_input(self):
         """텍스트 입력 완료 처리"""
