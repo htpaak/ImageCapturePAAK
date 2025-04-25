@@ -186,7 +186,7 @@ class ColorSpectrumWidget(QWidget):
 class CustomColorPicker(QDialog):
     """사용자 정의 색상 선택 대화상자 (두께 선택: 슬라이더 + 스핀박스)"""
     DEFAULT_THICKNESS = 2 # 기본 두께 값
-    MAX_THICKNESS = 32   # 최대 두께 값
+    MAX_THICKNESS = 72   # 최대 두께 값 (32에서 72로 변경)
 
     def __init__(self, initial_color=QColor(Qt.red), initial_thickness=DEFAULT_THICKNESS, parent=None):
         super().__init__(parent)
