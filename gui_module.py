@@ -14,7 +14,7 @@ import win32process
 import win32api  # 윈도우 API 추가
 
 # utils.py에서 함수 가져오기
-from utils import get_resource_path
+from utils import get_resource_path, qimage_to_pil # qimage_to_pil 임포트 추가
 # 편집기 모듈 가져오기
 from editor_module import ImageEditor
 
@@ -720,7 +720,17 @@ class CaptureUI(QMainWindow):
                 # 상태 표시줄에 저장 완료 메시지 표시 (3초 후 자동 사라짐)
                 self.statusBar().showMessage(f'Image saved: {saved_path}', 3000)
                 
-                # 저장 버튼 비활성화하지 않고 계속 활성화 상태 유지
+                # Capture module의 이미지 데이터도 업데이트
+                try:
+                    q_image = QImage(saved_path)
+                    if not q_image.isNull():
+                        pil_image = qimage_to_pil(q_image)
+                        self.capture_module.captured_image = pil_image
+                        print("[GUI] Capture module's internal image updated.")
+                    else:
+                        print("[GUI] Failed to load saved image into QImage for capture module update.")
+                except Exception as e:
+                    print(f"[GUI] Error updating capture module image: {e}")
             else:
                 QMessageBox.warning(self, "Save Error", "Failed to save image.")
         except Exception as e:
@@ -797,8 +807,9 @@ class CaptureUI(QMainWindow):
             # Create and show the full screen viewer
             # 이전 뷰어가 남아있을 수 있으므로 새로 생성하기 전에 확인/정리
             if self.fullscreen_viewer:
-                self.fullscreen_viewer.close() # 이전 뷰어 닫기
-            # self.fullscreen_viewer = FullScreenViewer(pixmap) # pixmap 대신 경로 전달
+                self.fullscreen_viewer.close()
+                self.fullscreen_viewer = None
+            
             self.fullscreen_viewer = FullScreenViewer(self.last_capture_path)
             # self.fullscreen_viewer.showFullScreen() # initUI에서 setGeometry 사용하므로 show() 호출
             self.fullscreen_viewer.show()
@@ -806,17 +817,42 @@ class CaptureUI(QMainWindow):
             self.statusBar().showMessage('No image captured to show in full screen.')
 
     def open_image_editor(self):
-        """캡처된 이미지를 편집기로 열기"""
-        if not self.last_capture_path or not os.path.exists(self.last_capture_path):
+        """이미지 편집기 열기"""
+        if not self.last_capture_path:
             QMessageBox.warning(self, "Error", "No image captured to edit!")
             return
             
         # 이미지 편집기 인스턴스 생성
         self.image_editor = ImageEditor(self.last_capture_path, self)
+        # 저장 완료 시그널 연결
+        self.image_editor.imageSaved.connect(self.handle_image_saved)
         self.image_editor.show()
         
         # 상태 표시줄 메시지 업데이트
         self.statusBar().showMessage("Image editor opened")
+
+    def handle_image_saved(self, saved_path):
+        """ImageEditor에서 이미지 저장 시 호출될 슬롯"""
+        print(f"[GUI] Received imageSaved signal for: {saved_path}")
+        self.last_capture_path = saved_path # 마지막 캡처 경로 업데이트
+        self.last_saved_file_path = saved_path # 마지막 저장 경로도 업데이트 (동일하게 취급)
+        self.update_preview(saved_path) # 프리뷰 업데이트
+        # 혹시 전체 화면 뷰어가 열려 있다면 업데이트
+        if self.fullscreen_viewer and self.fullscreen_viewer.isVisible():
+             self.fullscreen_viewer.image = QImage(saved_path)
+             self.fullscreen_viewer.update() # 다시 그리도록 요청
+             
+        # Capture module의 이미지 데이터도 업데이트
+        try:
+            q_image = QImage(saved_path)
+            if not q_image.isNull():
+                pil_image = qimage_to_pil(q_image)
+                self.capture_module.captured_image = pil_image
+                print("[GUI] Capture module's internal image updated.")
+            else:
+                print("[GUI] Failed to load saved image into QImage for capture module update.")
+        except Exception as e:
+            print(f"[GUI] Error updating capture module image: {e}")
 
 class WindowSelector(QWidget):
     """마우스 호버로 캡처할 창을 선택하는 위젯"""

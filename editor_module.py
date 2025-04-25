@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QLabel, QAction,
                             QToolBar, QFileDialog, QMessageBox, QApplication, QDesktopWidget, 
                             QToolButton, QMenu, QColorDialog, QComboBox, QLineEdit)
 from PyQt5.QtGui import QPixmap, QImage, QIcon, QPainter, QPen, QColor, QPolygonF, QBrush, QFont, QFontMetrics, QCursor, QPainterPath, QTransform
-from PyQt5.QtCore import Qt, QSize, QRect, QPoint, QRectF, QSizeF, QLineF, QPointF
+from PyQt5.QtCore import Qt, QSize, QRect, QPoint, QRectF, QSizeF, QLineF, QPointF, pyqtSignal
 import math
 import traceback
 # 사용자 정의 색상 선택기 import
@@ -14,6 +14,9 @@ from canvas_widget import ImageCanvas
 
 class ImageEditor(QMainWindow):
     """이미지 편집 기능을 제공하는 창"""
+    # 저장 완료 시그널 (저장된 파일 경로 전달)
+    imageSaved = pyqtSignal(str)
+    
     # 모자이크 레벨 상수 정의
     MOSAIC_LEVELS = {'Weak': 5, 'Medium': 10, 'Strong': 20}
     # 기본 화살표 두께 옵션
@@ -110,16 +113,16 @@ class ImageEditor(QMainWindow):
     def undo_action_triggered(self):
         """실행 취소 (상태는 작업 *후* 저장됨)"""
         if len(self.undo_stack) > 1: # 현재 상태 외에 이전 상태가 있어야 함 (원본 상태는 Undo 불가)
-             # 현재 상태(Undo할 상태)를 Undo 스택에서 제거하고 Redo 스택에 추가
-             current_state = self.undo_stack.pop()
-             self.redo_stack.append(current_state) # 작업 후 상태 저장
+            # 현재 상태(Undo할 상태)를 Undo 스택에서 제거하고 Redo 스택에 추가
+            current_state = self.undo_stack.pop()
+            self.redo_stack.append(current_state) # 작업 후 상태 저장
 
-             # 이전 상태(이제 Undo 스택의 마지막 상태)를 편집 이미지로 복원
-             previous_state = self.undo_stack[-1]
-             self.edited_image = QImage(previous_state) # 복사본 사용
+            # 이전 상태(이제 Undo 스택의 마지막 상태)를 편집 이미지로 복원
+            previous_state = self.undo_stack[-1]
+            self.edited_image = QImage(previous_state) # 복사본 사용
 
-             self.update_canvas()
-             self.update_undo_redo_actions()
+            self.update_canvas()
+            self.update_undo_redo_actions()
         # else:
         #    print("[Undo] Cannot undo initial state.")
 
@@ -187,7 +190,8 @@ class ImageEditor(QMainWindow):
         
         # 저장 버튼
         save_action = QAction(QIcon("assets/save_icon.svg"), "Save", self)
-        save_action.setToolTip("Save image")
+        save_action.setToolTip("Save image and close editor") # 툴팁 수정
+        save_action.triggered.connect(self.save_image_and_close) # 시그널 연결
         self.toolbar.addAction(save_action)
         
         copy_action = QAction(QIcon("assets/copy_icon.svg"), "Copy", self)
@@ -1094,6 +1098,43 @@ class ImageEditor(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to copy image to clipboard:\n{e}")
             print(f"[Copy] Error copying image to clipboard: {e}")
+            traceback.print_exc()
+
+    def save_image_and_close(self):
+        """편집된 이미지를 원본 파일에 저장하고 창을 닫습니다."""
+        if not self.edited_image or self.edited_image.isNull():
+            QMessageBox.warning(self, "Warning", "No edited image to save.")
+            print("[Save] No image available to save.")
+            return
+            
+        if not self.image_path:
+            QMessageBox.warning(self, "Warning", "Original image path is unknown. Cannot save.")
+            print("[Save] Original image path not set.")
+            # 또는 여기서 Save As 로직 호출 고려
+            return
+
+        # 변경 사항이 있는지 확인 (선택적이지만 권장)
+        # if self.edited_image == self.original_image:
+        #     print("[Save] No changes detected. Closing without saving.")
+        #     self.close() # 변경 없으면 그냥 닫기
+        #     return
+            
+        try:
+            print(f"[Save] Saving image to: {self.image_path}")
+            save_success = self.edited_image.save(self.image_path)
+            
+            if save_success:
+                print("[Save] Image saved successfully.")
+                # 저장 성공 시 시그널 발생
+                self.imageSaved.emit(self.image_path)
+                self.close() # 창 닫기
+            else:
+                QMessageBox.critical(self, "Error", f"Failed to save image to:\n{self.image_path}")
+                print(f"[Save] Failed to save image file.")
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"An error occurred while saving:\n{e}")
+            print(f"[Save] Error saving image: {e}")
             traceback.print_exc()
 
 # 테스트 코드 (독립 실행용)
