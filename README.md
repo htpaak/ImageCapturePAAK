@@ -56,10 +56,6 @@ Built with:
 - MSS for screen capture functionality 📷
 - Pillow for image processing 🖼️
 
-## License 📄
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
 ## Acknowledgments 🙏
 
 - Thanks to all the contributors who have helped with development 🙌
