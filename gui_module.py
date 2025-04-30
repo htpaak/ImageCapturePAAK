@@ -302,7 +302,7 @@ class CaptureUI(QMainWindow):
         btn_layout.setSpacing(15)
 
         # Full screen capture button
-        self.capture_btn = QPushButton('Screen Capture (F10)')
+        self.capture_btn = QPushButton('Screen Capture (F1)') # 단축키 텍스트 변경 F10->F1
         self.capture_btn.setMinimumHeight(45)  # 최소 높이 수정: 90 -> 45
         self.capture_btn.setFixedWidth(156)  # 너비 수정: 195 -> 156 (0.8배)
         self.capture_btn.setToolTip('Capture the entire screen')
@@ -312,7 +312,7 @@ class CaptureUI(QMainWindow):
         btn_layout.addWidget(self.capture_btn)
 
         # Area capture button
-        self.area_btn = QPushButton('Area Capture (F9)')
+        self.area_btn = QPushButton('Area Capture (F2)') # 단축키 텍스트 변경 F9->F2
         self.area_btn.setMinimumHeight(45)  # 최소 높이 수정: 90 -> 45
         self.area_btn.setFixedWidth(156)  # 너비 수정: 195 -> 156 (0.8배)
         self.area_btn.setToolTip('Drag to select an area to capture')
@@ -322,7 +322,7 @@ class CaptureUI(QMainWindow):
         btn_layout.addWidget(self.area_btn)
         
         # Window capture button
-        self.window_btn = QPushButton('Window Capture (F8)')
+        self.window_btn = QPushButton('Window Capture (F3)') # 단축키 텍스트 변경 F8->F3
         self.window_btn.setMinimumHeight(45)  # 최소 높이 수정: 90 -> 45
         self.window_btn.setFixedWidth(156)  # 너비 수정: 195 -> 156 (0.8배)
         self.window_btn.setToolTip('Capture the active window')

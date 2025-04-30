@@ -70,10 +70,11 @@ def main():
     # --- 전역 단축키 등록 --- #
     try:
         # 단축키 콜백에서 직접 함수 호출 대신 시그널 emit
-        keyboard.add_hotkey('F10', ui.captureFullScreenRequested.emit)
-        keyboard.add_hotkey('F9', ui.captureAreaRequested.emit)
-        keyboard.add_hotkey('F8', ui.captureWindowRequested.emit)
-        print("Global hotkeys (F8, F9, F10) registered.")
+        # 단축키 변경: F10->F1, F9->F2, F8->F3
+        keyboard.add_hotkey('F1', ui.captureFullScreenRequested.emit)
+        keyboard.add_hotkey('F2', ui.captureAreaRequested.emit)
+        keyboard.add_hotkey('F3', ui.captureWindowRequested.emit)
+        print("Global hotkeys (F1, F2, F3) registered.")
     except Exception as e:
         print(f"Error registering global hotkeys: {e}")
         # 관리자 권한이 없을 경우 에러 메시지 표시 (선택적)
