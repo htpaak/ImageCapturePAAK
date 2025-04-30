@@ -7,7 +7,8 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout
                            QFrame, QSizePolicy, QToolTip, QStatusBar, QDesktopWidget,
                            QShortcut, QDialog, QListWidget, QListWidgetItem, QAbstractItemView)
 from PyQt5.QtGui import QPixmap, QIcon, QPainter, QPainterPath, QPen, QColor, QBrush, QFont, QKeySequence, QCursor, QImage
-from PyQt5.QtCore import Qt, QRect, QPoint, QRectF, QSize, QTimer, QEvent
+from PyQt5.QtCore import Qt, QRect, QPoint, QRectF, QSize, QTimer, QEvent, QUrl
+from PyQt5.QtGui import QDesktopServices
 import win32gui
 import win32con
 import win32process
@@ -17,6 +18,24 @@ import win32api  # 윈도우 API 추가
 from utils import get_resource_path, qimage_to_pil # qimage_to_pil 임포트 추가
 # 편집기 모듈 가져오기
 from editor_module import ImageEditor
+
+# 클릭 가능한 피드백 라벨 클래스
+class FeedbackLabel(QLabel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setText("💬") # 이모지 텍스트 설정 (점 제거)
+        self.setToolTip("Send feedback") # 툴팁 설정 (영어로 변경)
+        self.setStyleSheet("font-size: 12px; padding-right: 5px;") # 스타일 설정 (우측 패딩 추가)
+        # 마우스 클릭 이벤트 활성화 (기본값은 비활성화)
+        self.setMouseTracking(True) 
+        self.setCursor(Qt.PointingHandCursor) # 마우스 오버 시 손가락 커서
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            # 깃허브 Discussions URL 열기
+            url = QUrl("https://github.com/htpaak/ImageCapturePAAK/discussions")
+            QDesktopServices.openUrl(url)
+        super().mousePressEvent(event) # 기본 이벤트 처리
 
 # 클래스 정의 앞에 와야 함
 class FullScreenViewer(QWidget):
@@ -418,20 +437,22 @@ class CaptureUI(QMainWindow):
         self.save_btn.setEnabled(False)
         button_layout.addWidget(self.save_btn)
         
+        # 오른쪽 스페이서 추가
+        button_layout.addStretch(1)
+        
         # 버튼 영역 추가
         bottom_layout.addLayout(button_layout)
         
         # 전체 하단 레이아웃 추가
         main_layout.addLayout(bottom_layout)
 
-        # Status bar setup
-        status_bar = QStatusBar()
-        status_bar.setStyleSheet("padding: 5px; font-size: 10px; min-height: 18px;")
-        self.setStatusBar(status_bar)
+        # --- 상태 표시줄 설정 --- #
+        self.statusBar().setStyleSheet("QStatusBar { border-top: 1px solid #cccccc; }")
         self.statusBar().showMessage('Ready')
-
-        # Tooltip font setup
-        QToolTip.setFont(QFont('Arial', 14))
+        
+        # 피드백 라벨 생성 및 상태 표시줄 오른쪽에 추가
+        feedback_label = FeedbackLabel(self)
+        self.statusBar().addPermanentWidget(feedback_label)
 
     def setup_shortcuts(self):
         """단축키를 설정합니다."""
