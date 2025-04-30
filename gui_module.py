@@ -125,7 +125,7 @@ class CaptureUI(QMainWindow):
     def initUI(self):
         """Initialize UI"""
         # Basic window settings
-        self.setWindowTitle('Snipix')
+        self.setWindowTitle('ImageCapturePAAK')
         # 창 크기 설정
         self.setGeometry(100, 100, 400, 435) # 너비 수정: 500 -> 400
         self.setStyleSheet("""
@@ -176,7 +176,7 @@ class CaptureUI(QMainWindow):
         icon_label.setAlignment(Qt.AlignVCenter)  # 수직 가운데 정렬
         
         # Program title
-        title_label = QLabel('Snipix')
+        title_label = QLabel('ImageCapturePAAK')
         title_label.setStyleSheet("font-size: 27px; font-weight: bold; color: #333333;")
         title_label.setAlignment(Qt.AlignVCenter)  # 수직 가운데 정렬
         
@@ -920,8 +920,8 @@ class WindowSelector(QWidget):
                 # 보이는 창만 추가
                 if win32gui.IsWindowVisible(hwnd) and not win32gui.IsIconic(hwnd):
                     title = win32gui.GetWindowText(hwnd)
-                    # 빈 제목이나 "Snipix" 포함 창은 제외
-                    if title and "Snipix" not in title:
+                    # 빈 제목이나 "ImageCapturePAAK" 포함 창은 제외
+                    if title and "ImageCapturePAAK" not in title:
                         # 실제 창 영역 가져오기
                         try:
                             left, top, right, bottom = win32gui.GetWindowRect(hwnd)

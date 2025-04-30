@@ -29,7 +29,7 @@ def main():
     
     # 애플리케이션 초기화
     app = QApplication(sys.argv)
-    app.setApplicationName('Snipix')
+    app.setApplicationName('ImageCapturePAAK')
     
     # 설정 관리자 초기화
     config_manager = ConfigManager()
@@ -54,7 +54,7 @@ def main():
             # Windows 작업 표시줄 아이콘 설정 (Windows 전용)
             if sys.platform == 'win32':
                 # 앱 ID 설정 - 작업 표시줄에서 아이콘을 그룹화하는 데 사용됨
-                app_id = 'com.snipix.screencapture'
+                app_id = 'com.ImageCapturePAAK.screencapture'
                 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
     except Exception as e:
         print(f"Error occurred during icon setup: {e}")

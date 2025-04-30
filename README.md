@@ -1,16 +1,16 @@
-# Snipix 📸
+# ImageCapturePAAK 📸
 
-Snipix is a powerful screen capture tool that allows you to take high-quality screenshots of your screen, selected areas, or specific windows with just a few clicks. ✨
+ImageCapturePAAK is a powerful screen capture tool that allows you to take high-quality screenshots of your screen, selected areas, or specific windows with just a few clicks. ✨
 
-[![GitHub release](https://img.shields.io/github/release/htpaak/Snipix.svg?logo=github)](https://github.com/htpaak/Snipix/releases/latest)
-[![GitHub downloads](https://img.shields.io/github/downloads/htpaak/Snipix/latest/total.svg?logo=github)](https://github.com/htpaak/Snipix/releases/latest)
-[![GitHub downloads](https://img.shields.io/github/downloads/htpaak/Snipix/total.svg?logo=github)](https://github.com/htpaak/Snipix/releases)
+[![GitHub release](https://img.shields.io/github/release/htpaak/ImageCapturePAAK.svg?logo=github)](https://github.com/htpaak/ImageCapturePAAK/releases/latest)
+[![GitHub downloads](https://img.shields.io/github/downloads/htpaak/ImageCapturePAAK/latest/total.svg?logo=github)](https://github.com/htpaak/ImageCapturePAAK/releases/latest)
+[![GitHub downloads](https://img.shields.io/github/downloads/htpaak/ImageCapturePAAK/total.svg?logo=github)](https://github.com/htpaak/ImageCapturePAAK/releases)
 
 ## Links 🔗
 
-- [Download 💾](https://github.com/htpaak/Snipix/releases/latest)
-- [GitHub Repository 💻](https://github.com/htpaak/Snipix)
-- [Feedback 💬](https://github.com/htpaak/Snipix/discussions)
+- [Download 💾](https://github.com/htpaak/ImageCapturePAAK/releases/latest)
+- [GitHub Repository 💻](https://github.com/htpaak/ImageCapturePAAK)
+- [Feedback 💬](https://github.com/htpaak/ImageCapturePAAK/discussions)
 
 ## Features ✨
 
@@ -23,7 +23,7 @@ Snipix is a powerful screen capture tool that allows you to take high-quality sc
 
 ## Demo 📸
 
-![Demo - Snipix Interface](assets/Demo_1.png)
+![Demo - ImageCapturePAAK Interface](assets/Demo_1.png)
 ![Demo - Image Editor](assets/Demo_2.png)
 
 ## System Requirements 💻
@@ -34,13 +34,13 @@ Snipix is a powerful screen capture tool that allows you to take high-quality sc
 
 ## Installation 🚀
 
-1. Download the latest release from the [releases page](https://github.com/htpaak/Snipix/releases/latest) 🔽
+1. Download the latest release from the [releases page](https://github.com/htpaak/ImageCapturePAAK/releases/latest) 🔽
 2. Run the installer or extract the portable version 📦
-3. Launch Snipix and start capturing! 🎉
+3. Launch ImageCapturePAAK and start capturing! 🎉
 
 ## Usage 🖱️
 
-1. Launch Snipix ▶️
+1. Launch ImageCapturePAAK ▶️
 2. Select your preferred capture method:
    - Full Screen Capture (F10) ⌨️
    - Rectangular Area Capture (F9) ⌨️

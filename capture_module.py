@@ -118,7 +118,7 @@ class ScreenCapture:
                 self.captured_image = img  # 이미지 저장
                 
                 # 임시 파일 생성 (미리보기용)
-                temp_dir = os.path.join(os.path.expanduser("~"), ".temp_snipix")
+                temp_dir = os.path.join(os.path.expanduser("~"), ".temp_ImageCapturePAAK")
                 if not os.path.exists(temp_dir):
                     os.makedirs(temp_dir)
                 
@@ -171,7 +171,7 @@ class ScreenCapture:
                 self.captured_image = img  # 이미지 저장
                 
                 # 임시 파일 생성 (미리보기용)
-                temp_dir = os.path.join(os.path.expanduser("~"), ".temp_snipix")
+                temp_dir = os.path.join(os.path.expanduser("~"), ".temp_ImageCapturePAAK")
                 if not os.path.exists(temp_dir):
                     os.makedirs(temp_dir)
                 
@@ -281,7 +281,7 @@ class ScreenCapture:
                     self.captured_image = img
                     
                     # 임시 파일 생성
-                    temp_dir = os.path.join(os.path.expanduser("~"), ".temp_snipix")
+                    temp_dir = os.path.join(os.path.expanduser("~"), ".temp_ImageCapturePAAK")
                     if not os.path.exists(temp_dir):
                         os.makedirs(temp_dir)
                     

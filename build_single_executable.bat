@@ -1,5 +1,5 @@
 @echo off
-echo Building Snipix single-file executable...
+echo Building ImageCapturePAAK single-file executable...
 echo.
 
 REM Check if PyInstaller is installed
@@ -10,7 +10,7 @@ if %errorlevel% neq 0 (
 )
 
 REM Create the single-file executable
-pyinstaller --name=Snipix ^
+pyinstaller --name=ImageCapturePAAK ^
   --icon=assets/icon.ico ^
   --windowed ^
   --onefile ^

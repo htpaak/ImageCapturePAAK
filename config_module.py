@@ -12,9 +12,9 @@ class ConfigManager:
         설정 관리자 초기화
         :param config_file: 설정 파일 경로 (None이면 기본 경로 사용)
         """
-        # 설정 파일 저장 경로 설정 (사용자의 AppData\Local 폴더 내에 Snipix 폴더)
+        # 설정 파일 저장 경로 설정 (사용자의 AppData\Local 폴더 내에 ImageCapturePAAK 폴더)
         user_home = os.path.expanduser("~")
-        self.config_dir = os.path.join(user_home, "AppData", "Local", "Snipix")
+        self.config_dir = os.path.join(user_home, "AppData", "Local", "ImageCapturePAAK")
         
         # 설정 폴더가 없으면 생성
         if not os.path.exists(self.config_dir):
