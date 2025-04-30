@@ -179,7 +179,7 @@ class CaptureUI(QMainWindow):
         self.tray_icon.activated.connect(self.on_tray_icon_activated)
         
         # 앱 시작 시 트레이 아이콘 표시 (선택적, 닫을 때만 표시하려면 주석 처리)
-        # self.tray_icon.show()
+        self.tray_icon.show() # 주석 제거
 
     def on_tray_icon_activated(self, reason):
         """트레이 아이콘 클릭 시 동작"""
