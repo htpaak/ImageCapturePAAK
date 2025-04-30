@@ -128,6 +128,8 @@ class CaptureUI(QMainWindow):
         self.fullscreen_viewer = None 
         # 창 상태 추적 변수 추가
         self._was_visible_before_capture = False 
+        # 단축키 ID 저장 변수 초기화
+        self.hotkey_ids = {}
         
         # 캡처 모듈의 저장 경로를 사용 (설정 파일에서 로드된 경로)
         self.default_save_dir = self.capture_module.save_dir
@@ -194,8 +196,17 @@ class CaptureUI(QMainWindow):
         # self.tray_icon.hide()
 
     def exit_app(self):
-        """애플리케이션 종료"""
-        self.tray_icon.hide() # 종료 전 트레이 아이콘 숨기기
+        """애플리케이션 종료 및 단축키 해제"""
+        print("[Exit] Unregistering hotkeys...")
+        try:
+            for key_name, key_id in self.hotkey_ids.items():
+                win32gui.UnregisterHotKey(None, key_id)
+                print(f"[Exit] Unregistered hotkey: {key_name} (ID: {key_id})")
+        except Exception as e:
+            print(f"[Exit] Error unregistering hotkeys: {e}")
+        
+        if self.tray_icon:
+            self.tray_icon.hide()
         QApplication.quit()
 
     # closeEvent 재정의
@@ -1167,6 +1178,12 @@ class CaptureUI(QMainWindow):
         print(f"[GUI DEBUG] update_thumbnail called with path: {image_path}") # 로그 메시지 수정
         # TODO: 썸네일 업데이트 로직 구현 (필요시)
         pass
+
+    # 단축키 ID 설정 메소드 추가
+    def set_hotkey_ids(self, ids):
+        """main.py에서 등록된 단축키 ID를 받아서 저장"""
+        self.hotkey_ids = ids
+        print(f"[Hotkey] Received hotkey IDs: {self.hotkey_ids}")
 
 class WindowSelector(QWidget):
     """마우스 호버로 캡처할 창을 선택하는 위젯"""
