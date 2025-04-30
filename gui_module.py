@@ -5,14 +5,16 @@ import datetime
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout, 
                            QWidget, QLabel, QFileDialog, QHBoxLayout, QMessageBox,
                            QFrame, QSizePolicy, QToolTip, QStatusBar, QDesktopWidget,
-                           QShortcut, QDialog, QListWidget, QListWidgetItem, QAbstractItemView)
+                           QShortcut, QDialog, QListWidget, QListWidgetItem, QAbstractItemView,
+                           QSystemTrayIcon, QAction, QMenu)
 from PyQt5.QtGui import QPixmap, QIcon, QPainter, QPainterPath, QPen, QColor, QBrush, QFont, QKeySequence, QCursor, QImage
-from PyQt5.QtCore import Qt, QRect, QPoint, QRectF, QSize, QTimer, QEvent, QUrl
+from PyQt5.QtCore import Qt, QRect, QPoint, QRectF, QSize, QTimer, QEvent, QUrl, pyqtSignal
 from PyQt5.QtGui import QDesktopServices
 import win32gui
 import win32con
 import win32process
 import win32api  # 윈도우 API 추가
+import traceback 
 
 # utils.py에서 함수 가져오기
 from utils import get_resource_path, qimage_to_pil # qimage_to_pil 임포트 추가
@@ -24,7 +26,7 @@ class FeedbackLabel(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setText("💬") # 이모지 텍스트 설정 (점 제거)
-        self.setToolTip("Send feedback") # 툴팁 설정 (영어로 변경)
+        self.setToolTip("Send feedback") # 툴 설정 (영어로 변경)
         self.setStyleSheet("font-size: 12px; padding-right: 5px;") # 스타일 설정 (우측 패딩 추가)
         # 마우스 클릭 이벤트 활성화 (기본값은 비활성화)
         self.setMouseTracking(True) 
@@ -109,6 +111,11 @@ class FullScreenViewer(QWidget):
             super().keyPressEvent(event)
 
 class CaptureUI(QMainWindow):
+    # 캡처 요청 시그널 정의
+    captureFullScreenRequested = pyqtSignal()
+    captureAreaRequested = pyqtSignal()
+    captureWindowRequested = pyqtSignal()
+
     def __init__(self, capture_module):
         super().__init__()
         self.capture_module = capture_module
@@ -118,7 +125,9 @@ class CaptureUI(QMainWindow):
         self.selection_rect = QRect()
         self.last_capture_path = None
         self.last_saved_file_path = None
-        self.fullscreen_viewer = None # 전체 화면 뷰어 참조 추가
+        self.fullscreen_viewer = None 
+        # 창 상태 추적 변수 추가
+        self._was_visible_before_capture = False 
         
         # 캡처 모듈의 저장 경로를 사용 (설정 파일에서 로드된 경로)
         self.default_save_dir = self.capture_module.save_dir
@@ -131,7 +140,78 @@ class CaptureUI(QMainWindow):
         self.initUI()
         
         # 단축키 설정
-        self.setup_shortcuts()
+        # self.setup_shortcuts() # QShortcut 대신 전역 단축키 사용
+        
+        # 트레이 아이콘 설정
+        self.setup_tray_icon()
+        
+        # 시그널-슬롯 연결
+        self.captureFullScreenRequested.connect(self.capture_full_screen)
+        self.captureAreaRequested.connect(self.capture_area)
+        self.captureWindowRequested.connect(self.capture_window)
+
+    def setup_tray_icon(self):
+        """시스템 트레이 아이콘 설정"""
+        icon_path = get_resource_path(os.path.join('assets', 'icon.ico'))
+        if not os.path.exists(icon_path):
+            print("Error: Tray icon not found at", icon_path)
+            self.tray_icon = None
+            return
+
+        self.tray_icon = QSystemTrayIcon(QIcon(icon_path), self)
+        self.tray_icon.setToolTip('ImageCapturePAAK')
+
+        # 트레이 아이콘 메뉴 생성
+        tray_menu = QMenu()
+        show_action = QAction("Show", self)
+        exit_action = QAction("Exit", self)
+
+        show_action.triggered.connect(self.show_window)
+        exit_action.triggered.connect(self.exit_app)
+
+        tray_menu.addAction(show_action)
+        tray_menu.addSeparator()
+        tray_menu.addAction(exit_action)
+
+        self.tray_icon.setContextMenu(tray_menu)
+        self.tray_icon.activated.connect(self.on_tray_icon_activated)
+        
+        # 앱 시작 시 트레이 아이콘 표시 (선택적, 닫을 때만 표시하려면 주석 처리)
+        # self.tray_icon.show()
+
+    def on_tray_icon_activated(self, reason):
+        """트레이 아이콘 클릭 시 동작"""
+        # 왼쪽 클릭 시 창 표시
+        if reason == QSystemTrayIcon.Trigger:
+            self.show_window()
+
+    def show_window(self):
+        """메인 창을 표시하고 활성화"""
+        self.show()
+        self.activateWindow()
+        self.raise_()
+        # 필요하다면 트레이 아이콘 숨김 (선택적)
+        # self.tray_icon.hide()
+
+    def exit_app(self):
+        """애플리케이션 종료"""
+        self.tray_icon.hide() # 종료 전 트레이 아이콘 숨기기
+        QApplication.quit()
+
+    # closeEvent 재정의
+    def closeEvent(self, event):
+        """창 닫기 이벤트를 가로채 트레이로 최소화"""
+        event.ignore() # 기본 닫기 동작 무시
+        self.hide()    # 창 숨기기
+        if self.tray_icon:
+            self.tray_icon.show() # 트레이 아이콘 표시
+            # 트레이 아이콘 메시지 표시 (선택적)
+            self.tray_icon.showMessage(
+                "ImageCapturePAAK",
+                "Application minimized to tray. Use hotkeys (F8/F9/F10) to capture.",
+                QSystemTrayIcon.Information,
+                2000
+            )
 
     def center_on_screen(self):
         """Center the window on the screen"""
@@ -454,222 +534,333 @@ class CaptureUI(QMainWindow):
         feedback_label = FeedbackLabel(self)
         self.statusBar().addPermanentWidget(feedback_label)
 
-    def setup_shortcuts(self):
-        """단축키를 설정합니다."""
-        # 전체 캡처 단축키 (F10)
-        self.shortcut_full = QShortcut(QKeySequence('F10'), self)
-        self.shortcut_full.activated.connect(self.capture_full_screen)
-        self.capture_btn.setText('Screen Capture (F10)')
-        
-        # 영역 캡처 단축키 (F9)
-        self.shortcut_area = QShortcut(QKeySequence('F9'), self)
-        self.shortcut_area.activated.connect(self.capture_area)
-        self.area_btn.setText('Area Capture (F9)')
-        
-        # 창 캡처 단축키 (F8)
-        self.shortcut_window = QShortcut(QKeySequence('F8'), self)
-        self.shortcut_window.activated.connect(self.capture_window)
-        self.window_btn.setText('Window Capture (F8)')
-
-        # 전체 화면 미리보기 단축키 (ESC)
-        self.shortcut_fullscreen = QShortcut(QKeySequence(Qt.Key_Escape), self)
-        self.shortcut_fullscreen.activated.connect(self.show_fullscreen_preview)
-        # ESC 키는 다른 용도로도 사용될 수 있으므로, Context 설정이 중요할 수 있음
-        # self.shortcut_fullscreen.setContext(Qt.ApplicationShortcut) # 또는 Qt.WindowShortcut
-
     def _force_window_to_foreground(self):
         """윈도우 API를 사용하여 창을 강제로 최상위로 가져옵니다"""
+        # 이전에 주석 처리되었던 함수 복원
         try:
-            # 현재 창의 핸들 가져오기
             hwnd = int(self.winId())
-            
-            # 현재 포그라운드 창 핸들
             foreground_hwnd = win32gui.GetForegroundWindow()
-            
-            # 이미 앞에 있다면 추가 작업 불필요
             if hwnd == foreground_hwnd:
                 return
-                
-            # 현재 포그라운드 창의 스레드 ID 가져오기
             foreground_thread = win32process.GetWindowThreadProcessId(foreground_hwnd)[0]
-            # 현재 창의 스레드 ID 가져오기
             current_thread = win32api.GetCurrentThreadId()
-            
-            # 키보드 상태를 연결하여 포커스 변경 허용
             if foreground_thread != current_thread:
                 win32process.AttachThreadInput(foreground_thread, current_thread, True)
-                # 창을 최상위로 가져오기
                 win32gui.BringWindowToTop(hwnd)
                 win32gui.SetForegroundWindow(hwnd)
-                # 키보드 상태 연결 해제
                 win32process.AttachThreadInput(foreground_thread, current_thread, False)
             else:
-                # 직접 최상위로 설정
                 win32gui.SetForegroundWindow(hwnd)
-                
-            # 알트 키를 시뮬레이션하여 창 활성화 돕기
-            win32api.keybd_event(win32con.VK_MENU, 0, 0, 0)  # ALT 키 누름
-            win32api.keybd_event(win32con.VK_MENU, 0, win32con.KEYEVENTF_KEYUP, 0)  # ALT 키 해제
-            
-            print("Forced window activation complete")
-            
+            win32api.keybd_event(win32con.VK_MENU, 0, 0, 0)
+            win32api.keybd_event(win32con.VK_MENU, 0, win32con.KEYEVENTF_KEYUP, 0)
+            print("[Force Foreground] Forced window activation complete")
         except Exception as e:
-            print(f"Error during window activation: {e}")
+            print(f"[Force Foreground] Error during window activation: {e}")
 
     def capture_full_screen(self):
         """Perform full screen capture"""
+        print("[Capture Trigger] Full screen capture requested.") # 로그 추가
         self.statusBar().showMessage('Capturing full screen...')
         
-        # 캡처 모듈에 현재 창 객체를 전달하여 캡처 중 숨김 처리
-        self.last_capture_path = self.capture_module.capture_full_screen(window_to_hide=self)
+        # 캡처 시작 전 상태 저장
+        self._was_visible_before_capture = self.isVisible()
+        print(f"[Capture Trigger] Window was visible before full screen capture: {self._was_visible_before_capture}")
         
-        # 캡처 후 창 바로 표시 및 활성화
-        if not self.isVisible():
-            self.show()
-            self.activateWindow()
-            self.raise_()
-            # 강제 활성화 추가
-            QTimer.singleShot(100, self._force_window_to_foreground)
+        # 트레이 상태일 때는 window_to_hide를 None으로 전달
+        window_to_hide = self if self._was_visible_before_capture else None
+        self.last_capture_path = self.capture_module.capture_full_screen(window_to_hide=window_to_hide)
+        print(f"[Capture Complete] Full screen capture attempted. Path: {self.last_capture_path}")
         
-        # 미리보기 업데이트 (지연 없이 바로 실행)
-        self.update_preview(self.last_capture_path)
-        self.statusBar().showMessage('Full screen capture completed - Press Save button to save the image')
-        self.save_btn.setEnabled(True)
+        # 캡처 후 창 상태 확인 및 처리
+        if self._was_visible_before_capture: 
+            print("[Capture Complete] Processing for previously visible window...")
+            # 창 바로 표시 및 활성화
+            if not self.isVisible():
+                print("[Capture Complete] Window is hidden, showing now...")
+                self.show()
+                self.activateWindow()
+                self.raise_()
+                # 강제 활성화 추가
+                QTimer.singleShot(100, self._force_window_to_foreground)
+            
+            # 미리보기 업데이트 (지연 없이 바로 실행) -> 지연 추가
+            if self.last_capture_path:
+                # QTimer.singleShot(50, lambda p=self.last_capture_path: self.update_preview(p))
+                QTimer.singleShot(50, lambda: self.update_preview(self.last_capture_path))
+                self.statusBar().showMessage('Full screen capture completed - Press Save button to save the image')
+                self.save_btn.setEnabled(True)
+            else:
+                print("[Capture Complete] Capture failed (no path returned). Showing error message.")
+                self.statusBar().showMessage('Full screen capture failed!')
+                self.save_btn.setEnabled(False)
+        else: 
+            print("[Capture Complete] Processing for tray capture...")
+            if self.last_capture_path: # 트레이 상태에서 캡처 성공
+                # --- 자동 저장 호출 제거 --- #
+                # print("[Tray Capture] Attempting auto-save for full screen...")
+                # self.save_image() 
+                
+                # --- 메인 창 표시 및 활성화 --- #
+                print("[Tray Capture] Capture successful, showing main window...")
+                self.show()
+                self.activateWindow()
+                self.raise_()
+                QTimer.singleShot(100, self._force_window_to_foreground)
+                
+                # --- 미리보기 업데이트 (지연 포함) --- #
+                QTimer.singleShot(50, lambda: self.update_preview(self.last_capture_path))
+                
+                # --- 상태 표시줄 업데이트 및 버튼 활성화 --- #
+                self.statusBar().showMessage('Full screen capture completed - Press Save or Edit')
+                self.save_btn.setEnabled(True)
+                # Edit 버튼 활성화는 update_preview에서 처리됩니다.
+
+            else: # 트레이 상태에서 캡처 실패
+                # 트레이 알림 제거 (오류는 로그로 확인)
+                # if self.tray_icon: self.tray_icon.showMessage(...)
+                 print(f"[Tray Capture] Full screen capture failed.")
+                 # 실패 시 메인 창을 띄울 필요는 없음
 
     def capture_area(self):
         """Start area selection capture mode"""
+        print("[Capture Trigger] Area capture requested.") # 로그 추가
         self.statusBar().showMessage('Rectangular area selection mode - Drag to select an area')
         
-        # Create and display separate area selection window
-        self.area_selector = AreaSelector(self)
-        self.hide()  # Hide main window
+        # 캡처 시작 전 상태 저장
+        self._was_visible_before_capture = self.isVisible()
+        print(f"[Capture Trigger] Window was visible before area capture: {self._was_visible_before_capture}")
         
-        # 더 길게 대기하지 않아도 됨 (캡처 모듈에서 대기 처리)
-        QApplication.processEvents()
+        # AreaSelector 생성
+        self.area_selector = AreaSelector(self)
+        
+        # 메인 창이 보이는 경우에만 숨김
+        if self._was_visible_before_capture:
+            print("[Capture Trigger] Hiding main window for area selection.")
+            self.hide()
         
         # Display area selector
+        print("[Capture Trigger] Showing AreaSelector.")
         self.area_selector.show()
         self.area_selector.activateWindow()
         self.area_selector.raise_()
 
     def capture_window(self):
         """마우스 호버로 캡처할 창을 선택"""
+        print("[Capture Trigger] Window capture requested.") # 로그 추가
         self.statusBar().showMessage('Move mouse over a window and click to capture it')
         
-        # 현재 창을 일시적으로 숨김
-        self.hide()
-        QApplication.processEvents()  # UI 즉시 갱신
+        # 캡처 시작 전 상태 저장
+        self._was_visible_before_capture = self.isVisible()
+        print(f"[Capture Trigger] Window was visible before window capture: {self._was_visible_before_capture}")
         
-        # 다른 창이 활성화될 시간 확보 (짧게 조정)
-        time.sleep(0.2)
+        # 메인 창이 보이는 경우에만 숨김
+        if self._was_visible_before_capture:
+            print("[Capture Trigger] Hiding main window for window selection.")
+            self.hide()
+            QApplication.processEvents() 
+            time.sleep(0.2)
         
         # 창 선택 위젯 생성 및 표시
+        print("[Capture Trigger] Showing WindowSelector.")
         self.window_selector = WindowSelector(self)
-        
-        # 위젯 초기화 및 표시
-        QApplication.processEvents()  # UI 즉시 갱신
+        QApplication.processEvents() 
         self.window_selector.show()
         self.window_selector.activateWindow()
         self.window_selector.raise_()
 
     def process_window_selection(self, hwnd, title):
         """선택한 창 캡처 처리"""
+        print(f"[Capture Process] Window selection processed. HWND: {hwnd}, Title: '{title}'") # 로그 추가
+        print(f"[Capture Process] Main window was visible before capture: {self._was_visible_before_capture}")
+        
         # 취소한 경우
         if hwnd is None:
             self.statusBar().showMessage('Capture canceled')
-            self.show()
-            self.activateWindow()
-            self.raise_()
-            # 강제 활성화 추가
-            QTimer.singleShot(100, self._force_window_to_foreground)
+            if self._was_visible_before_capture:
+                print("[Capture Process] Capture canceled, showing main window.")
+                self.show()
+                self.activateWindow()
+                self.raise_()
+                QTimer.singleShot(100, self._force_window_to_foreground)
             return
         
         # 캡처 실행
         try:
-            # 창이 유효한지 다시 확인
             if not win32gui.IsWindow(hwnd):
-                print("Invalid window handle.")
+                print("[Capture Process] Invalid window handle.")
                 self.statusBar().showMessage('Invalid window. Please try again.')
-                self.show()
-                self.activateWindow()
-                self.raise_()
-                # 강제 활성화 추가
-                QTimer.singleShot(100, self._force_window_to_foreground)
+                if self._was_visible_before_capture:
+                    print("[Capture Process] Invalid handle, showing main window.")
+                    self.show()
+                    self.activateWindow()
+                    self.raise_()
+                    QTimer.singleShot(100, self._force_window_to_foreground)
                 return
                 
-            # 창 정보 확인
             window_title = win32gui.GetWindowText(hwnd)
-            # print(f"Window to capture: {window_title} (Handle: {hwnd})") # 이미 capture_module에서 출력하므로 중복 제거
+            print(f"[Capture Process] Attempting capture for HWND: {hwnd}, Title: '{window_title}'")
             
-            # 선택한 창 캡처 (hwnd를 전달하여 해당 창만 캡처)
-            self.last_capture_path = self.capture_module.capture_window(window_to_hide=self, hwnd=hwnd)
+            # 트레이 상태 고려하여 window_to_hide 전달
+            window_to_hide_capture = self if self._was_visible_before_capture else None
+            self.last_capture_path = self.capture_module.capture_window(window_to_hide=window_to_hide_capture, hwnd=hwnd)
+            print(f"[Capture Complete] Window capture attempted. Path: {self.last_capture_path}")
             
-            # 창 즉시 표시 및 활성화
-            if not self.isVisible():
-                self.show()
-                self.activateWindow()
-                self.raise_()
-                # 강제 활성화 추가
-                QTimer.singleShot(100, self._force_window_to_foreground)
-            
-            # 미리보기 업데이트
-            self.update_preview(self.last_capture_path)
-            
-            # 캡처된 창 이름 표시
-            window_name = window_title if window_title else "Selected window"
-            self.statusBar().showMessage(f'Capture of window "{window_name}" completed - Press Save button to save the image')
-            self.save_btn.setEnabled(True)
-            
+            # 창 상태에 따라 처리 분기
+            if self._was_visible_before_capture:
+                print("[Capture Complete] Processing for previously visible window...")
+                # 창 즉시 표시 및 활성화
+                if not self.isVisible():
+                    print("[Capture Complete] Window is hidden, showing now...")
+                    self.show()
+                    self.activateWindow()
+                    self.raise_()
+                    QTimer.singleShot(100, self._force_window_to_foreground)
+                
+                # 미리보기 업데이트 -> 지연 추가
+                if self.last_capture_path:
+                    # QTimer.singleShot(50, lambda p=self.last_capture_path: self.update_preview(p))
+                    QTimer.singleShot(50, lambda: self.update_preview(self.last_capture_path))
+                    window_name = window_title if window_title else "Selected window"
+                    self.statusBar().showMessage(f'Capture of window "{window_name}" completed - Press Save button to save the image')
+                    self.save_btn.setEnabled(True)
+                else:
+                    print("[Capture Complete] Capture failed (no path returned). Showing error message.")
+                    self.statusBar().showMessage(f'Capture of window "{window_title}" failed!')
+                    self.save_btn.setEnabled(False)
+
+            else: # 트레이 상태에서 캡처한 경우
+                print("[Capture Complete] Processing for tray capture...")
+                if self.last_capture_path:
+                    # --- 자동 저장 호출 제거 --- #
+                    # print("[Tray Capture] Attempting auto-save for window capture...")
+                    # self.save_image()
+
+                    # --- 메인 창 표시 및 활성화 --- #
+                    print("[Tray Capture] Window capture successful, showing main window...")
+                    self.show()
+                    self.activateWindow()
+                    self.raise_()
+                    QTimer.singleShot(100, self._force_window_to_foreground)
+
+                    # --- 미리보기 업데이트 (지연 포함) --- #
+                    QTimer.singleShot(50, lambda: self.update_preview(self.last_capture_path))
+
+                    # --- 상태 표시줄 업데이트 및 버튼 활성화 --- #
+                    # window_title 변수가 이 범위에서 사용 가능하도록 확인 또는 수정 필요
+                    # -> try 블록 안에서 선언되었으므로, title 파라미터를 사용하도록 수정
+                    window_name = title if title else "Selected window"
+                    self.statusBar().showMessage(f'Capture of window "{window_name}" completed - Press Save or Edit')
+                    self.save_btn.setEnabled(True)
+                    # Edit 버튼 활성화는 update_preview에서 처리됩니다.
+
+                else:
+                    # 트레이 알림 제거 (오류는 로그로 확인)
+                    # if self.tray_icon: self.tray_icon.showMessage(...)
+                    # window_title 변수 사용 제거 또는 title 사용
+                    print(f"[Tray Capture] Window capture failed for '{title if title else 'Unknown'}'.") 
+                    # 실패 시 메인 창을 띄울 필요는 없음
+
         except Exception as e:
-            print(f"Error processing window capture: {e}")
-            if not self.isVisible():
+            print(f"[Capture Process] Error processing window capture: {e}")
+            traceback.print_exc() # 상세 에러 로그 추가
+            if self._was_visible_before_capture and not self.isVisible():
+                print("[Capture Process] Error occurred, showing main window.")
                 self.show()
                 self.activateWindow()
                 self.raise_()
-                # 강제 활성화 추가
                 QTimer.singleShot(100, self._force_window_to_foreground)
-            self.statusBar().showMessage(f'Capture failed: {str(e)}')
+            if self._was_visible_before_capture:
+                self.statusBar().showMessage(f'Capture failed: {str(e)}')
             QMessageBox.warning(self, "Capture Error", f"An error occurred during screen capture: {str(e)}")
 
     def process_area_selection(self, rect):
         """Process area selection"""
+        print(f"[Capture Process] Area selection processed. Rect: {rect}") # 로그 추가
+        print(f"[Capture Process] Main window was visible before capture: {self._was_visible_before_capture}")
+
         # 유효하지 않은 선택 영역인 경우 처리
         if rect.width() <= 5 or rect.height() <= 5:
             self.statusBar().showMessage('Area selection too small or canceled.')
-            self.show()  # 메인 창 표시 확인
+            if self._was_visible_before_capture:
+                print("[Capture Process] Area too small, showing main window.")
+                self.show()
             return
             
-        # 캡처 모듈에 현재 창 객체를 전달하여 캡처 중 숨김 처리
+        print(f"[Capture Process] Attempting area capture for Rect: {rect}")
+        # 트레이 상태 고려하여 window_to_hide 전달
+        window_to_hide_capture = self if self._was_visible_before_capture else None
         self.last_capture_path = self.capture_module.capture_area(
-            rect.x(), rect.y(), rect.width(), rect.height(), window_to_hide=self)
+            rect.x(), rect.y(), rect.width(), rect.height(), window_to_hide=window_to_hide_capture)
+        print(f"[Capture Complete] Area capture attempted. Path: {self.last_capture_path}")
         
-        # 창 즉시 표시 및 활성화
-        if not self.isVisible():
-            self.show()
-            self.activateWindow()
-            self.raise_()
-            # 강제 활성화 추가
-            QTimer.singleShot(100, self._force_window_to_foreground)
-            
-        # 미리보기 업데이트
-        self.update_preview(self.last_capture_path)
-        self.statusBar().showMessage('Area capture completed - Press Save button to save the image')
-        self.save_btn.setEnabled(True)
+        # 창 상태에 따라 처리 분기
+        if self._was_visible_before_capture:
+            print("[Capture Complete] Processing for previously visible window...")
+            # 창 즉시 표시 및 활성화
+            if not self.isVisible():
+                print("[Capture Complete] Window is hidden, showing now...")
+                self.show()
+                self.activateWindow()
+                self.raise_()
+                QTimer.singleShot(100, self._force_window_to_foreground)
+                
+            # 미리보기 업데이트 -> 지연 추가
+            if self.last_capture_path:
+                # QTimer.singleShot(50, lambda p=self.last_capture_path: self.update_preview(p))
+                QTimer.singleShot(50, lambda: self.update_preview(self.last_capture_path))
+                self.statusBar().showMessage('Area capture completed - Press Save button to save the image')
+                self.save_btn.setEnabled(True)
+            else:
+                print("[Capture Complete] Capture failed (no path returned). Showing error message.")
+                self.statusBar().showMessage('Area capture failed!')
+                self.save_btn.setEnabled(False)
+        else: # 트레이 상태에서 캡처한 경우
+             print("[Capture Complete] Processing for tray capture...")
+             if self.last_capture_path:
+                 # --- 자동 저장 호출 제거 --- #
+                 # print("[Tray Capture] Attempting auto-save for area capture...")
+                 # self.save_image()
+
+                 # --- 메인 창 표시 및 활성화 --- #
+                 print("[Tray Capture] Area capture successful, showing main window...")
+                 self.show()
+                 self.activateWindow()
+                 self.raise_()
+                 QTimer.singleShot(100, self._force_window_to_foreground)
+
+                 # --- 미리보기 업데이트 (지연 포함) --- #
+                 QTimer.singleShot(50, lambda: self.update_preview(self.last_capture_path))
+
+                 # --- 상태 표시줄 업데이트 및 버튼 활성화 --- #
+                 self.statusBar().showMessage('Area capture completed - Press Save or Edit')
+                 self.save_btn.setEnabled(True)
+                 # Edit 버튼 활성화는 update_preview에서 처리됩니다.
+
+             else:
+                 # 트레이 알림 제거 (오류는 로그로 확인)
+                 # if self.tray_icon: self.tray_icon.showMessage(...)
+                 print(f"[Tray Capture] Area capture failed.")
+                 # 실패 시 메인 창을 띄울 필요는 없음
 
     def update_preview(self, image_path):
         """Update captured image preview"""
+        print(f"[Update Preview] Called with path: {image_path}") # 로그 추가
         if os.path.exists(image_path):
             # 이미지 로드
             pixmap = QPixmap(image_path)
             
             if pixmap.isNull():
+                print("[Update Preview Error] Failed to load QPixmap.") # 로그 추가
                 self.preview_label.setText('Cannot load image')
-                # 객체 이름 선택자로 스타일 적용 (배경색 유지)
                 self.preview_label.setStyleSheet("#previewLabel { color: #888888; font-size: 8pt; background-color: white; }") 
+                self.edit_btn.setEnabled(False)
+                self.fullscreen_placeholder_btn.setEnabled(False)
                 return
             
+            print("[Update Preview] QPixmap loaded successfully.") # 로그 추가
             # 레이블 최대 크기 가져오기
             label_size = self.preview_label.size()
+            print(f"[Update Preview] Preview label size: {label_size.width()}x{label_size.height()}") # 로그 추가
             
             # 레이블 크기에 맞게 이미지 스케일링 (꽉 차게 표시)
             scaled_pixmap = pixmap.scaled(
@@ -678,27 +869,25 @@ class CaptureUI(QMainWindow):
                 Qt.KeepAspectRatio,
                 Qt.SmoothTransformation
             )
+            print(f"[Update Preview] Scaled pixmap size: {scaled_pixmap.width()}x{scaled_pixmap.height()}") # 로그 추가
             
             # 스케일링된 이미지 설정
             self.preview_label.setPixmap(scaled_pixmap)
-            # 객체 이름 선택자로 스타일 적용 (배경색 유지)
             self.preview_label.setStyleSheet("#previewLabel { background-color: black; }") 
+            print("[Update Preview] Pixmap set on label.") # 로그 추가
             
             # Edit 버튼 활성화
             self.edit_btn.setEnabled(True)
-            # 풀스크린 버튼 활성화
             self.fullscreen_placeholder_btn.setEnabled(True)
             
-            # 콘솔에 디버깅 정보 출력
-            print(f"원본 이미지 크기: {pixmap.width()}x{pixmap.height()}, "
-                  f"레이블 크기: {label_size.width()}x{label_size.height()}, "
-                  f"스케일링된 이미지 크기: {scaled_pixmap.width()}x{scaled_pixmap.height()}")
+            # 콘솔에 디버깅 정보 출력 -> 로그로 대체
+            # print(f"원본 이미지 크기: {pixmap.width()}x{pixmap.height()}, "
+            #       f"레이블 크기: {label_size.width()}x{label_size.height()}, "
+            #       f"스케일링된 이미지 크기: {scaled_pixmap.width()}x{scaled_pixmap.height()}")
         else:
-            # 이미지를 찾을 수 없는 경우
+            print(f"[Update Preview Error] Image path does not exist: {image_path}") # 로그 추가
             self.preview_label.setText('Cannot load image')
-            # 객체 이름 선택자로 스타일 적용 (배경색 유지)
             self.preview_label.setStyleSheet("#previewLabel { color: #888888; font-size: 8pt; background-color: white; }") 
-            # Edit 버튼 비활성화
             self.edit_btn.setEnabled(False)
             self.fullscreen_placeholder_btn.setEnabled(False)
 
@@ -722,40 +911,108 @@ class CaptureUI(QMainWindow):
 
     def save_image(self):
         """Save captured image"""
+        print("[Save Image Triggered]") # 함수 시작 로그 추가
+        # Check if capture_module has the captured_image attribute and it's not None
         if not hasattr(self.capture_module, 'captured_image') or self.capture_module.captured_image is None:
-            QMessageBox.warning(self, "Save Error", "There is no captured image to save.")
-            return
-        
+            print("[Save Image Error] No captured image data found in capture_module.") # 로그 추가
+            # Try loading from last_capture_path as a fallback
+            if self.last_capture_path and os.path.exists(self.last_capture_path):
+                print("[Save Image Fallback] Trying to load image from last_capture_path:", self.last_capture_path)
+                try:
+                    # Load QImage, convert to PIL, and set it in capture_module
+                    q_img = QImage(self.last_capture_path)
+                    if not q_img.isNull():
+                        pil_img = qimage_to_pil(q_img)
+                        self.capture_module.captured_image = pil_img # 여기서 다시 설정
+                        print("[Save Image Fallback] Successfully loaded image from path and updated capture_module.")
+                    else:
+                        print("[Save Image Fallback Error] Failed to load QImage from path.")
+                        # 트레이 모드에서는 QMessageBox 사용 부적절 -> 로그만 남김
+                        # QMessageBox.warning(self, "Save Error", "Could not load the captured image data to save.")
+                        return # 저장 실패
+                except Exception as e:
+                     print(f"[Save Image Fallback Error] Exception loading image from path: {e}")
+                     # 트레이 모드에서는 QMessageBox 사용 부적절 -> 로그만 남김
+                     # QMessageBox.warning(self, "Save Error", f"Error loading captured image: {e}")
+                     return # 저장 실패
+            else:
+                print("[Save Image Error] No valid last_capture_path found either.")
+                # 트레이 모드에서는 QMessageBox 사용 부적절 -> 로그만 남김
+                # QMessageBox.warning(self, "Save Error", "There is no captured image to save.")
+                return # 저장 실패
+
+        # Fallback 후에도 capture_module.captured_image가 없는 경우 재확인
+        if not hasattr(self.capture_module, 'captured_image') or self.capture_module.captured_image is None:
+             print("[Save Image Error] Image data still missing after fallback attempt.")
+             return # 최종 저장 실패
+
+        # Now we should have self.capture_module.captured_image available
+        print("[Save Image] Found captured image data in capture_module.")
+
         # Auto-generate filename (based on current date and time)
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"screenshot_{timestamp}.png"
         
         # Create save path
         file_path = os.path.join(self.default_save_dir, filename)
+        print(f"[Save Image] Generated save path: {file_path}")
         
         try:
             # 캡처 모듈의 저장 함수 호출
+            print("[Save Image] Calling capture_module.save_captured_image...") # 호출 전 로그
             saved_path = self.capture_module.save_captured_image(file_path)
             if saved_path:
                 self.last_saved_file_path = saved_path # 저장된 경로 저장
-                # 상태 표시줄에 저장 완료 메시지 표시 (3초 후 자동 사라짐)
-                self.statusBar().showMessage(f'Image saved: {saved_path}', 3000)
+                print(f"[Save Image Success] Image saved: {saved_path}") # Log success
+                # 상태 표시줄 메시지는 창이 보일 때만
+                if self.isVisible():
+                    self.statusBar().showMessage(f'Image saved: {saved_path}', 3000)
                 
-                # Capture module의 이미지 데이터도 업데이트
+                # 트레이 알림 (저장 성공 시)
+                if self.tray_icon and not self.isVisible(): # 트레이 모드에서만 알림
+                     self.tray_icon.showMessage(
+                         "ImageCapturePAAK",
+                         f"Image saved: {os.path.basename(saved_path)}",
+                         QSystemTrayIcon.Information,
+                         2000
+                     )
+
+                # Capture module의 이미지 데이터도 업데이트 (Optional but good practice)
                 try:
                     q_image = QImage(saved_path)
                     if not q_image.isNull():
                         pil_image = qimage_to_pil(q_image)
-                        self.capture_module.captured_image = pil_image
-                        print("[GUI] Capture module's internal image updated.")
+                        self.capture_module.captured_image = pil_image # 저장 후에도 최신 데이터 유지
+                        print("[GUI] Capture module's internal image updated after save.")
                     else:
-                        print("[GUI] Failed to load saved image into QImage for capture module update.")
+                        print("[GUI Error] Failed to load saved image into QImage for capture module update.")
                 except Exception as e:
-                    print(f"[GUI] Error updating capture module image: {e}")
+                    print(f"[GUI Error] Error updating capture module image after save: {e}")
             else:
-                QMessageBox.warning(self, "Save Error", "Failed to save image.")
+                print("[Save Image Error] capture_module.save_captured_image returned None.")
+                # 트레이 모드에서는 QMessageBox 사용 부적절
+                # QMessageBox.warning(self, "Save Error", "Failed to save image.")
+                # 트레이 알림 (저장 실패 시)
+                if self.tray_icon and not self.isVisible():
+                     self.tray_icon.showMessage(
+                         "ImageCapturePAAK",
+                         "Failed to save image!",
+                         QSystemTrayIcon.Warning,
+                         2000
+                     )
         except Exception as e:
-            QMessageBox.critical(self, "Save Error", f"An error occurred while saving the file: {str(e)}")
+            print(f"[Save Image Error] Exception during saving: {e}") # Log exception
+            traceback.print_exc() # Print full traceback
+            # 트레이 모드에서는 QMessageBox 사용 부적절
+            # QMessageBox.critical(self, "Save Error", f"An error occurred while saving the file: {str(e)}")
+            # 트레이 알림 (저장 오류 시)
+            if self.tray_icon and not self.isVisible():
+                 self.tray_icon.showMessage(
+                     "ImageCapturePAAK",
+                     f"Error saving image: {e}",
+                     QSystemTrayIcon.Critical,
+                     3000
+                 )
 
     def resizeEvent(self, event):
         """Update preview when window size changes"""

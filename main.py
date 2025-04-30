@@ -1,5 +1,7 @@
 import sys
 import os
+# keyboard 라이브러리 임포트
+import keyboard 
 from PyQt5.QtWidgets import QApplication, QMessageBox
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt
@@ -30,6 +32,8 @@ def main():
     # 애플리케이션 초기화
     app = QApplication(sys.argv)
     app.setApplicationName('ImageCapturePAAK')
+    # 마지막 창이 닫혀도 애플리케이션 종료되지 않도록 설정
+    app.setQuitOnLastWindowClosed(False)
     
     # 설정 관리자 초기화
     config_manager = ConfigManager()
@@ -63,6 +67,21 @@ def main():
     ui.show()
     ui.center_on_screen()
     
+    # --- 전역 단축키 등록 --- #
+    try:
+        # 단축키 콜백에서 직접 함수 호출 대신 시그널 emit
+        keyboard.add_hotkey('F10', ui.captureFullScreenRequested.emit)
+        keyboard.add_hotkey('F9', ui.captureAreaRequested.emit)
+        keyboard.add_hotkey('F8', ui.captureWindowRequested.emit)
+        print("Global hotkeys (F8, F9, F10) registered.")
+    except Exception as e:
+        print(f"Error registering global hotkeys: {e}")
+        # 관리자 권한이 없을 경우 에러 메시지 표시 (선택적)
+        if isinstance(e, ImportError) or "permissions" in str(e).lower():
+            QMessageBox.warning(None, "Hotkey Error", 
+                                "Failed to register global hotkeys.\n" 
+                                "Please try running the application as administrator.")
+
     # 애플리케이션 실행
     sys.exit(app.exec_())
 
