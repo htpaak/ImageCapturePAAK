@@ -313,33 +313,36 @@ class CaptureUI(QMainWindow):
         btn_layout.setSpacing(15)
 
         # Full screen capture button
-        self.capture_btn = QPushButton('Screen Capture (F1)') # 단축키 텍스트 변경 F10->F1
-        self.capture_btn.setMinimumHeight(45)  # 최소 높이 수정: 90 -> 45
-        self.capture_btn.setFixedWidth(156)  # 너비 수정: 195 -> 156 (0.8배)
+        self.capture_btn = QPushButton('Screen Capture (Alt+1)') # 단축키 텍스트 변경
+        self.capture_btn.setMinimumHeight(45)
+        self.capture_btn.setFixedWidth(156)
         self.capture_btn.setToolTip('Capture the entire screen')
         self.capture_btn.setIcon(QIcon.fromTheme('camera-photo'))
-        self.capture_btn.setStyleSheet("font-size: 8pt;") # 폰트 크기 수정: 7pt -> 8pt
-        self.capture_btn.clicked.connect(self.capture_full_screen)
+        self.capture_btn.setStyleSheet("font-size: 8pt;")
+        # 시그널 사용으로 변경
+        self.capture_btn.clicked.connect(self.captureFullScreenRequested.emit)
         btn_layout.addWidget(self.capture_btn)
 
         # Area capture button
-        self.area_btn = QPushButton('Area Capture (F2)') # 단축키 텍스트 변경 F9->F2
-        self.area_btn.setMinimumHeight(45)  # 최소 높이 수정: 90 -> 45
-        self.area_btn.setFixedWidth(156)  # 너비 수정: 195 -> 156 (0.8배)
+        self.area_btn = QPushButton('Area Capture (Alt+2)') # 단축키 텍스트 변경
+        self.area_btn.setMinimumHeight(45)
+        self.area_btn.setFixedWidth(156)
         self.area_btn.setToolTip('Drag to select an area to capture')
         self.area_btn.setIcon(QIcon.fromTheme('select-rectangular'))
-        self.area_btn.setStyleSheet("font-size: 8pt;") # 폰트 크기 수정: 7pt -> 8pt
-        self.area_btn.clicked.connect(self.capture_area)
+        self.area_btn.setStyleSheet("font-size: 8pt;")
+        # 시그널 사용으로 변경
+        self.area_btn.clicked.connect(self.captureAreaRequested.emit)
         btn_layout.addWidget(self.area_btn)
         
         # Window capture button
-        self.window_btn = QPushButton('Window Capture (F3)') # 단축키 텍스트 변경 F8->F3
-        self.window_btn.setMinimumHeight(45)  # 최소 높이 수정: 90 -> 45
-        self.window_btn.setFixedWidth(156)  # 너비 수정: 195 -> 156 (0.8배)
+        self.window_btn = QPushButton('Window Capture (Alt+3)') # 단축키 텍스트 변경
+        self.window_btn.setMinimumHeight(45)
+        self.window_btn.setFixedWidth(156)
         self.window_btn.setToolTip('Capture the active window')
         self.window_btn.setIcon(QIcon.fromTheme('window'))
-        self.window_btn.setStyleSheet("font-size: 8pt;") # 폰트 크기 수정: 7pt -> 8pt
-        self.window_btn.clicked.connect(self.capture_window)
+        self.window_btn.setStyleSheet("font-size: 8pt;")
+        # 시그널 사용으로 변경
+        self.window_btn.clicked.connect(self.captureWindowRequested.emit)
         btn_layout.addWidget(self.window_btn)
 
         # Add button layout
