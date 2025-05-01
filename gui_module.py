@@ -15,6 +15,7 @@ import win32con
 import win32process
 import win32api  # 윈도우 API 추가
 import traceback 
+import logging # 로깅 모듈 임포트
 
 # utils.py에서 함수 가져오기
 from utils import get_resource_path, qimage_to_pil # qimage_to_pil 임포트 추가
@@ -365,6 +366,15 @@ class CaptureUI(QMainWindow):
 
         preview_header_layout.addStretch(1) # 공간 확장
 
+        # Copy 버튼 추가 (Edit 버튼 앞에)
+        self.copy_btn = QPushButton('Copy')
+        self.copy_btn.setFixedSize(80, 30)
+        self.copy_btn.setToolTip('Copy the captured image to clipboard')
+        self.copy_btn.setStyleSheet("font-size: 8pt;")
+        self.copy_btn.clicked.connect(self.copy_image_to_clipboard) # 메서드 연결
+        self.copy_btn.setEnabled(False) # 초기에는 비활성화
+        preview_header_layout.addWidget(self.copy_btn)
+
         # Edit 버튼 추가
         self.edit_btn = QPushButton('Edit')
         self.edit_btn.setFixedSize(80, 30) # 크기 설정 (임의)
@@ -676,6 +686,7 @@ class CaptureUI(QMainWindow):
         
         # 창 선택 위젯 생성 및 표시
         print("[Capture Trigger] Showing WindowSelector.")
+        logging.debug("[Capture Trigger] Creating and showing WindowSelector.") # 로그 추가
         self.window_selector = WindowSelector(self)
         QApplication.processEvents() 
         self.window_selector.show()
@@ -869,6 +880,7 @@ class CaptureUI(QMainWindow):
                 self.preview_label.setStyleSheet("#previewLabel { color: #888888; font-size: 8pt; background-color: white; }") 
                 self.edit_btn.setEnabled(False)
                 self.fullscreen_placeholder_btn.setEnabled(False)
+                self.copy_btn.setEnabled(False) # 복사 버튼 비활성화
                 return
             
             print("[Update Preview] QPixmap loaded successfully.") # 로그 추가
@@ -893,6 +905,7 @@ class CaptureUI(QMainWindow):
             # Edit 버튼 활성화
             self.edit_btn.setEnabled(True)
             self.fullscreen_placeholder_btn.setEnabled(True)
+            self.copy_btn.setEnabled(True) # 복사 버튼 활성화
             
             # 콘솔에 디버깅 정보 출력 -> 로그로 대체
             # print(f"원본 이미지 크기: {pixmap.width()}x{pixmap.height()}, "
@@ -904,6 +917,7 @@ class CaptureUI(QMainWindow):
             self.preview_label.setStyleSheet("#previewLabel { color: #888888; font-size: 8pt; background-color: white; }") 
             self.edit_btn.setEnabled(False)
             self.fullscreen_placeholder_btn.setEnabled(False)
+            self.copy_btn.setEnabled(False) # 복사 버튼 비활성화
 
     def set_save_path(self):
         """Set save path"""
@@ -1125,6 +1139,26 @@ class CaptureUI(QMainWindow):
         # 상태 표시줄 메시지 업데이트
         self.statusBar().showMessage("Image editor opened")
 
+    def copy_image_to_clipboard(self):
+        """현재 미리보기 이미지를 클립보드에 복사합니다."""
+        if self.last_capture_path and os.path.exists(self.last_capture_path):
+            try:
+                pixmap = QPixmap(self.last_capture_path)
+                if pixmap.isNull():
+                    self.statusBar().showMessage('Failed to load image for copying', 3000)
+                    return
+                
+                clipboard = QApplication.clipboard()
+                clipboard.setImage(pixmap.toImage()) # QPixmap을 QImage로 변환하여 복사
+                self.statusBar().showMessage('Image copied to clipboard', 3000)
+                print(f"[Clipboard] Image copied from {self.last_capture_path}")
+
+            except Exception as e:
+                self.statusBar().showMessage(f'Error copying image: {e}', 3000)
+                print(f"[Clipboard Error] Failed to copy image: {e}")
+        else:
+            self.statusBar().showMessage('No image to copy', 3000)
+
     def handle_image_saved(self, saved_path):
         """ImageEditor에서 이미지 저장 시 호출될 슬롯"""
         print(f"[GUI] Received imageSaved signal for: {saved_path}")
@@ -1213,6 +1247,7 @@ class WindowSelector(QWidget):
         """사용 가능한 모든 창 목록을 미리 가져옴"""
         try:
             self.window_list = []
+            logging.debug("[WindowSelector] Loading window list...") # 로그 추가
             
             def enum_windows_proc(hwnd, results):
                 # 보이는 창만 추가
@@ -1225,15 +1260,20 @@ class WindowSelector(QWidget):
                             left, top, right, bottom = win32gui.GetWindowRect(hwnd)
                             width = right - left
                             height = bottom - top
+                            logging.debug(f"  - Found window: '{title}' ({width}x{height}) HWND: {hwnd}") # 로그 추가
                             # 최소 크기 이상인 창만 추가
-                            if width > 100 and height > 100:
+                            if width > 100 and height > 100: # 주석 제거하여 복원
                                 # 창 핸들, 제목, 영역 저장
                                 self.window_list.append({
                                     'hwnd': hwnd,
                                     'title': title,
                                     'rect': QRect(left, top, width, height)
                                 })
-                        except:
+                                logging.debug(f"    -> Added to list (meets size requirement).") # 로그 추가
+                            else:
+                                logging.debug(f"    -> Skipped (doesn't meet size requirement).") # 로그 추가
+                        except Exception as e_rect:
+                            logging.warning(f"    -> Error getting rect for HWND {hwnd}: {e_rect}") # 로그 추가
                             pass
                 return True
                 
@@ -1278,17 +1318,32 @@ class WindowSelector(QWidget):
         )
         
     def find_window_at_position(self, pos):
-        """마우스 위치에 있는 창 찾기"""
+        """마우스 위치에 있는 창 찾기 (가장 작은 창 우선)"""
+        logging.debug(f"[WindowSelector] Finding window at physical position: {pos.x()},{pos.y()}")
+        
+        matching_windows = []
         for window in self.window_list:
+            logging.debug(f"  - Checking against: '{window['title']}' Rect: {window['rect']}")
             if window['rect'].contains(pos):
-                return window
-        return None
+                logging.debug(f"    -> Potential match.") # 로그 수정
+                matching_windows.append(window)
+        
+        if not matching_windows:
+            logging.debug("  -> No match found.")
+            return None
+            
+        # 매칭된 창들 중에서 가장 작은 창 찾기
+        smallest_window = min(matching_windows, key=lambda w: w['rect'].width() * w['rect'].height())
+        logging.debug(f"  -> Smallest matching window selected: '{smallest_window['title']}'") # 로그 추가
+        
+        return smallest_window
             
     def check_mouse_position(self):
         """마우스 위치에 있는 창 확인"""
         try:
             # 마우스 현재 위치 가져오기 (논리적 좌표)
             logical_cursor_pos = QCursor.pos()
+            logging.debug(f"[WindowSelector] Checking mouse. Logical pos: {logical_cursor_pos.x()},{logical_cursor_pos.y()}") # 로그 추가
             
             # 현재 화면의 devicePixelRatio 가져오기
             screen = QApplication.screenAt(logical_cursor_pos) # 마우스 커서가 있는 화면
@@ -1299,15 +1354,18 @@ class WindowSelector(QWidget):
                 device_pixel_ratio = screen.devicePixelRatio()
             else:
                 device_pixel_ratio = 1.0 # Fallback
+            logging.debug(f"[WindowSelector] Device Pixel Ratio: {device_pixel_ratio}") # 로그 추가
                 
             # 논리적 좌표를 물리적 픽셀 좌표로 변환
             physical_cursor_pos = QPoint(
                 int(logical_cursor_pos.x() * device_pixel_ratio),
                 int(logical_cursor_pos.y() * device_pixel_ratio)
             )
+            logging.debug(f"[WindowSelector] Calculated physical pos: {physical_cursor_pos.x()},{physical_cursor_pos.y()}") # 로그 추가
             
             # 물리적 좌표로 마우스 위치에 있는 창 찾기
             window = self.find_window_at_position(physical_cursor_pos)
+            logging.debug(f"[WindowSelector] Find result: {'Found' if window else 'None'}") # 로그 추가
             
             # 창을 찾았으면 정보 업데이트
             if window:
