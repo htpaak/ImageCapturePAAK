@@ -40,3 +40,47 @@ def qimage_to_pil(qimage):
     pil_image = Image.frombytes("RGBA", (width, height), ptr.asstring())
     
     return pil_image 
+
+def register_startup(enable: bool):
+    """Windows 시작 프로그램에 애플리케이션을 등록하거나 해제합니다."""
+    import winreg
+    import sys
+    import os
+
+    app_name = "ImageCapturePAAK" # 레지스트리에 등록될 이름
+    # 현재 실행 파일 경로 가져오기
+    exe_path = sys.executable
+    
+    # .py 스크립트를 직접 실행하는 경우, 생성될 .exe 경로를 예상하기 어려움
+    # 개발 중에는 .py 파일을 직접 등록하거나, 패키징 후 .exe 경로로 테스트 필요
+    # 여기서는 sys.executable을 사용 (일반적으로 python.exe 또는 패키징된 exe)
+    if not os.path.exists(exe_path):
+         print(f"[Startup Error] Executable path not found: {exe_path}")
+         return False
+
+    key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+    
+    try:
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_ALL_ACCESS)
+        
+        if enable:
+            winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, exe_path)
+            print(f"[Startup] Application registered to run on startup: {exe_path}")
+        else:
+            try:
+                winreg.DeleteValue(key, app_name)
+                print(f"[Startup] Application unregistered from startup.")
+            except FileNotFoundError:
+                # 키가 이미 없는 경우 무시
+                print(f"[Startup] Application was not registered for startup.")
+                pass 
+                
+        winreg.CloseKey(key)
+        return True
+        
+    except OSError as e:
+        print(f"[Startup Error] Failed to access registry: {e}")
+        return False
+    except Exception as e:
+        print(f"[Startup Error] An unexpected error occurred: {e}")
+        return False 

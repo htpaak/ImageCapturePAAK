@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout
                            QWidget, QLabel, QFileDialog, QHBoxLayout, QMessageBox,
                            QFrame, QSizePolicy, QToolTip, QStatusBar, QDesktopWidget,
                            QShortcut, QDialog, QListWidget, QListWidgetItem, QAbstractItemView,
-                           QSystemTrayIcon, QAction, QMenu)
+                           QSystemTrayIcon, QAction, QMenu, QCheckBox)
 from PyQt5.QtGui import QPixmap, QIcon, QPainter, QPainterPath, QPen, QColor, QBrush, QFont, QKeySequence, QCursor, QImage
 from PyQt5.QtCore import Qt, QRect, QPoint, QRectF, QSize, QTimer, QEvent, QUrl, pyqtSignal
 from PyQt5.QtGui import QDesktopServices
@@ -18,7 +18,7 @@ import traceback
 import logging # 로깅 모듈 임포트
 
 # utils.py에서 함수 가져오기
-from utils import get_resource_path, qimage_to_pil # qimage_to_pil 임포트 추가
+from utils import get_resource_path, qimage_to_pil, register_startup # register_startup 임포트 추가
 # 편집기 모듈 가져오기
 from editor_module import ImageEditor
 
@@ -134,6 +134,10 @@ class CaptureUI(QMainWindow):
         
         # 캡처 모듈의 저장 경로를 사용 (설정 파일에서 로드된 경로)
         self.default_save_dir = self.capture_module.save_dir
+        
+        # --- 추가: 설정 로드 및 시작 시 실행 상태 적용 --- #
+        self.config_manager = self.capture_module.config_manager # ConfigManager 인스턴스 가져오기
+        self.start_on_boot_enabled = self.config_manager.get_setting("start_on_boot", False) # 인스턴스 변수로 변경
         
         # Create directory if it doesn't exist
         if not os.path.exists(self.default_save_dir):
@@ -467,6 +471,17 @@ class CaptureUI(QMainWindow):
         # 경로 표시 영역 추가
         bottom_layout.addLayout(path_info_layout)
         
+        # 시작 옵션 체크박스 영역
+        startup_layout = QHBoxLayout()
+        self.start_on_boot_checkbox = QCheckBox("Start on boot")
+        self.start_on_boot_checkbox.setToolTip("Automatically start ImageCapturePAAK when Windows starts.")
+        self.start_on_boot_checkbox.setStyleSheet("font-size: 14px; color: #555555;") # 경로 레이블과 유사하게 스타일링
+        self.start_on_boot_checkbox.setChecked(self.start_on_boot_enabled) # 인스턴스 변수 사용
+        self.start_on_boot_checkbox.stateChanged.connect(self.handle_start_on_boot_changed) # 핸들러 연결
+        startup_layout.addWidget(self.start_on_boot_checkbox)
+        startup_layout.addStretch(1) # 체크박스를 왼쪽으로 정렬
+        bottom_layout.addLayout(startup_layout) # 버튼 위에 체크박스 레이아웃 추가
+        
         # 버튼 영역
         button_layout = QHBoxLayout()
         button_layout.setSpacing(15)
@@ -557,6 +572,27 @@ class CaptureUI(QMainWindow):
         # 피드백 라벨 생성 및 상태 표시줄 오른쪽에 추가
         feedback_label = FeedbackLabel(self)
         self.statusBar().addPermanentWidget(feedback_label)
+
+    def handle_start_on_boot_changed(self, state):
+        """'Start on boot' 체크박스 상태 변경 처리"""
+        enabled = (state == Qt.Checked)
+        print(f"[Checkbox] Start on boot changed. New state: {enabled}")
+        
+        # 설정 업데이트
+        self.config_manager.set_start_on_boot(enabled)
+        
+        # 시작 프로그램 등록/해제
+        success = register_startup(enabled)
+        
+        if success:
+            status_message = f"Start on boot {'enabled' if enabled else 'disabled'}."
+        else:
+            status_message = f"Failed to {'enable' if enabled else 'disable'} start on boot."
+            # 사용자에게 오류 알림 (선택적)
+            QMessageBox.warning(self, "Startup Setting Error", 
+                                f"Could not update the startup setting. Please check application permissions or logs.")
+                                
+        self.statusBar().showMessage(status_message, 3000)
 
     def _force_window_to_foreground(self):
         """윈도우 API를 사용하여 창을 강제로 최상위로 가져옵니다"""

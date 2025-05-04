@@ -148,9 +148,14 @@ def main():
     except Exception as e:
         print(f"Error occurred during icon setup: {e}")
 
-    # UI 표시
-    ui.show()
-    ui.center_on_screen()
+    # --- 시작 시 동작 결정 --- #
+    start_in_tray = config_manager.get_setting("start_in_tray", True) # 설정값 읽기
+    if not start_in_tray:
+        # 트레이 시작이 아니면 UI 표시 및 중앙 정렬
+        ui.show()
+        ui.center_on_screen()
+    # 트레이 시작인 경우, gui_module의 setup_tray_icon에서 아이콘이 표시됨
+    # (메인 창은 show()되지 않음)
 
     # 애플리케이션 실행
     exit_code = app.exec_()

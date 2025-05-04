@@ -35,7 +35,9 @@ class ConfigManager:
             "show_preview": True,
             "auto_copy_to_clipboard": False,
             "auto_save": True,
-            "save_quality": 100  # PNG의 경우 압축 레벨 (0-100)
+            "save_quality": 100,  # PNG의 경우 압축 레벨 (0-100)
+            "start_on_boot": False, # 시작 시 실행 설정 추가
+            "start_in_tray": True   # 시작 시 트레이에서 실행 설정 추가
         }
         self.settings = self.load_settings()
         
@@ -105,4 +107,9 @@ class ConfigManager:
         :param value: 새 값
         """
         self.settings[key] = value
-        self.save_settings() 
+        self.save_settings()
+
+    def set_start_on_boot(self, enabled: bool):
+        """시작 시 실행 설정을 업데이트하고 저장합니다."""
+        self.update_setting("start_on_boot", enabled)
+        print(f"Start on boot setting updated to: {enabled}") 
