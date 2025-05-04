@@ -64,8 +64,11 @@ def register_startup(enable: bool):
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_ALL_ACCESS)
         
         if enable:
-            winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, exe_path)
-            print(f"[Startup] Application registered to run on startup: {exe_path}")
+            # 실행 경로에 --startup 인수를 추가하고 따옴표로 감싸기
+            # 경로에 공백이 있을 경우를 대비
+            startup_command = f'"{exe_path}" --startup'
+            winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, startup_command)
+            print(f"[Startup] Application registered to run on startup: {startup_command}")
         else:
             try:
                 winreg.DeleteValue(key, app_name)

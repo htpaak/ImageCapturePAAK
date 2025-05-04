@@ -149,13 +149,28 @@ def main():
         print(f"Error occurred during icon setup: {e}")
 
     # --- 시작 시 동작 결정 --- #
-    start_in_tray = config_manager.get_setting("start_in_tray", True) # 설정값 읽기
-    if not start_in_tray:
-        # 트레이 시작이 아니면 UI 표시 및 중앙 정렬
+    # start_in_tray = config_manager.get_setting("start_in_tray", True) # 설정값 읽기
+    # if not start_in_tray:
+    #     # 트레이 시작이 아니면 UI 표시 및 중앙 정렬
+    #     ui.show()
+    #     ui.center_on_screen()
+    # # 트레이 시작인 경우, gui_module의 setup_tray_icon에서 아이콘이 표시됨
+    # # (메인 창은 show()되지 않음)
+    show_window_on_start = True # 기본적으로 창 표시
+    if "--startup" in sys.argv: # 시작 프로그램으로 실행되었는지 확인
+        print("[Startup Arg] Detected --startup argument.")
+        start_in_tray = config_manager.get_setting("start_in_tray", True)
+        if start_in_tray:
+            print("[Startup Arg] Start in tray is enabled, hiding main window.")
+            show_window_on_start = False # 트레이 시작 설정이 켜져 있으면 창 숨김
+        else:
+            print("[Startup Arg] Start in tray is disabled, showing main window.")
+    else:
+        print("[Startup Arg] No --startup argument detected (manual launch).")
+        
+    if show_window_on_start:
         ui.show()
         ui.center_on_screen()
-    # 트레이 시작인 경우, gui_module의 setup_tray_icon에서 아이콘이 표시됨
-    # (메인 창은 show()되지 않음)
 
     # 애플리케이션 실행
     exit_code = app.exec_()
