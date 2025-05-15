@@ -62,7 +62,7 @@ class ImageEditor(QMainWindow):
         self.current_circle_thickness = CustomColorPicker.DEFAULT_THICKNESS # 기본 두께
         
         # 사각형 색상/두께 변수 추가
-        self.rectangle_color = QColor(Qt.green) # 기본 초록색
+        self.rectangle_color = QColor(Qt.red) # 기본 빨간색
         self.current_rectangle_thickness = CustomColorPicker.DEFAULT_THICKNESS # 기본 두께
         
         # 하이라이트 색상/두께 변수 추가
